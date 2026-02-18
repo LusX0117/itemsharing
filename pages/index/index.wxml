@@ -1,7 +1,90 @@
-<!--index.wxml-->
-<navigation-bar title="Weixin" back="{{false}}" color="black" background="#FFF"></navigation-bar>
+<navigation-bar title="校园物品共享" back="{{false}}" color="black" background="#f8fbff"></navigation-bar>
+
 <scroll-view class="scrollarea" scroll-y type="list">
-  <view class="container">
-    Weixin
+  <view class="page">
+    <view class="hero card">
+      <view>
+        <view class="hero-title">{{campusName}} · 物品共享平台</view>
+        <view class="hero-subtitle">闲置流动起来，让借用更简单</view>
+      </view>
+      <button class="publish-btn" size="mini" bindtap="openPublishPanel">发布物品</button>
+    </view>
+
+    <view class="stats-grid">
+      <view class="card stat" wx:for="{{stats}}" wx:key="label">
+        <view class="stat-value">{{item.value}}</view>
+        <view class="stat-label">{{item.label}}</view>
+      </view>
+    </view>
+
+    <view class="card">
+      <input
+        class="search-input"
+        placeholder="搜索物品名称、地点、关键词"
+        value="{{searchKeyword}}"
+        bindinput="handleKeywordInput"
+      />
+      <scroll-view class="category-scroll" scroll-x enhanced show-scrollbar="false">
+        <view
+          class="category-pill {{activeCategory === item ? 'active' : ''}}"
+          wx:for="{{categoryOptions}}"
+          wx:key="*this"
+          data-category="{{item}}"
+          bindtap="selectCategory"
+        >
+          {{item}}
+        </view>
+      </scroll-view>
+    </view>
+
+    <view class="section-title">共享物品列表</view>
+    <view wx:if="{{filteredItems.length === 0}}" class="empty card">暂无匹配物品，试试其他关键词吧。</view>
+    <view wx:for="{{filteredItems}}" wx:key="id" class="card item-card">
+      <view class="item-header">
+        <view>
+          <view class="item-title">{{item.title}}</view>
+          <view class="item-owner">{{item.owner}}</view>
+        </view>
+        <view class="badge">{{item.status}}</view>
+      </view>
+      <view class="item-description">{{item.description}}</view>
+      <view class="item-tags">
+        <text class="tag">{{item.category}}</text>
+        <text class="tag">{{item.location}}</text>
+      </view>
+      <view class="item-footer">
+        <view>租金 ¥{{item.price}}/天 · 押金 ¥{{item.deposit}}</view>
+        <button class="action-btn" size="mini">申请借用</button>
+      </view>
+    </view>
+
+    <view class="section-title">最新求借</view>
+    <view wx:for="{{demandList}}" wx:key="id" class="card demand-card">
+      <view class="demand-title">{{item.title}}</view>
+      <view class="demand-meta">{{item.publisher}}</view>
+      <view class="demand-reward">{{item.reward}}</view>
+    </view>
   </view>
 </scroll-view>
+
+<view wx:if="{{showPublishPanel}}" class="mask" bindtap="closePublishPanel">
+  <view class="publish-panel" catchtap="noop">
+    <view class="panel-title">发布共享物品</view>
+
+    <input class="panel-input" placeholder="物品名称" value="{{draftItem.title}}" data-field="title" bindinput="handleDraftInput" />
+
+    <picker mode="selector" range="{{publishCategoryOptions}}" bindchange="chooseDraftCategory">
+      <view class="panel-picker">物品分类：{{draftItem.category}}</view>
+    </picker>
+
+    <input class="panel-input" type="digit" placeholder="日租金（元）" value="{{draftItem.price}}" data-field="price" bindinput="handleDraftInput" />
+    <input class="panel-input" type="digit" placeholder="押金（元）" value="{{draftItem.deposit}}" data-field="deposit" bindinput="handleDraftInput" />
+    <input class="panel-input" placeholder="交接地点" value="{{draftItem.location}}" data-field="location" bindinput="handleDraftInput" />
+    <textarea class="panel-textarea" placeholder="补充描述（可选）" value="{{draftItem.description}}" data-field="description" bindinput="handleDraftInput" />
+
+    <view class="panel-actions">
+      <button size="mini" bindtap="closePublishPanel">取消</button>
+      <button size="mini" type="primary" bindtap="publishItem">确认发布</button>
+    </view>
+  </view>
+</view>
