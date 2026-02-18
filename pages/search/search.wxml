@@ -1,0 +1,40 @@
+<navigation-bar title="搜索" back="{{false}}" color="black" background="#f8fbff"></navigation-bar>
+
+<scroll-view class="scrollarea" scroll-y>
+  <view class="page">
+    <view class="card auth-bar">
+      <view class="auth-text" wx:if="{{currentUser}}">当前账号：{{currentUser.nickname}}</view>
+      <view class="auth-text" wx:else>未登录，登录后可直接申请借用</view>
+      <button wx:if="{{!currentUser}}" class="auth-btn" size="mini" bindtap="goAuth">去登录</button>
+    </view>
+
+    <view class="card">
+      <input class="search-input" placeholder="搜索物品/地点/关键词" value="{{keyword}}" bindinput="handleKeywordInput" />
+      <scroll-view class="category-scroll" scroll-x enhanced show-scrollbar="false">
+        <view
+          wx:for="{{categoryOptions}}"
+          wx:key="*this"
+          class="category-pill {{activeCategory === item ? 'active' : ''}}"
+          data-category="{{item}}"
+          bindtap="chooseCategory"
+        >
+          {{item}}
+        </view>
+      </scroll-view>
+    </view>
+
+    <view wx:if="{{filteredItems.length === 0}}" class="empty card">暂无匹配物品</view>
+    <view wx:for="{{filteredItems}}" wx:key="id" class="card item-card">
+      <view class="item-header">
+        <view class="item-title">{{item.title}}</view>
+        <view class="badge">{{item.status}}</view>
+      </view>
+      <view class="item-desc">{{item.description}}</view>
+      <view class="item-owner">{{item.owner}} · {{item.location}}</view>
+      <view class="item-footer">
+        <view class="item-price">¥{{item.price}}/天 · 押金 ¥{{item.deposit}}</view>
+        <button class="borrow-btn" size="mini" data-id="{{item.id}}" bindtap="applyBorrow">申请借用</button>
+      </view>
+    </view>
+  </view>
+</scroll-view>

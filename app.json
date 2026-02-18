@@ -1,7 +1,41 @@
 {
   "pages": [
-    "pages/index/index"
+    "pages/index/index",
+    "pages/search/search",
+    "pages/publish/publish",
+    "pages/messages/messages",
+    "pages/me/me",
+    "pages/auth/auth",
+    "pages/chat/chat"
   ],
+  "tabBar": {
+    "color": "#6b7280",
+    "selectedColor": "#0f766e",
+    "backgroundColor": "#fbfcf8",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "主页"
+      },
+      {
+        "pagePath": "pages/search/search",
+        "text": "搜索"
+      },
+      {
+        "pagePath": "pages/publish/publish",
+        "text": "发布"
+      },
+      {
+        "pagePath": "pages/messages/messages",
+        "text": "信息"
+      },
+      {
+        "pagePath": "pages/me/me",
+        "text": "我的"
+      }
+    ]
+  },
   "window": {
     "navigationBarTextStyle": "black",
     "navigationStyle": "custom"
@@ -14,7 +48,7 @@
       "defaultContentBox": true,
       "tagNameStyleIsolation": "legacy",
       "disableABTest": true,
-      "sdkVersionBegin": "3.0.0",
+      "sdkVersionBegin": "2.29.2",
       "sdkVersionEnd": "15.255.255"
     }
   },

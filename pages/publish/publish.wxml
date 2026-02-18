@@ -1,0 +1,41 @@
+<navigation-bar title="发布" back="{{false}}" color="black" background="#f8fbff"></navigation-bar>
+
+<view class="page">
+  <view wx:if="{{!currentUser}}" class="card empty">
+    <view class="empty-title">请先登录后发布信息</view>
+    <button class="auth-btn" bindtap="goAuth">去登录</button>
+  </view>
+
+  <view wx:else class="card">
+    <view class="switcher">
+      <view class="tab {{mode === 'lend' ? 'active' : ''}}" data-mode="lend" bindtap="switchMode">出借发布</view>
+      <view class="tab {{mode === 'demand' ? 'active' : ''}}" data-mode="demand" bindtap="switchMode">求借发布</view>
+    </view>
+
+    <view wx:if="{{mode === 'lend'}}">
+      <view class="panel-title">发布可出借物品</view>
+      <input class="panel-input" placeholder="物品名称" value="{{lendForm.title}}" data-field="title" bindinput="handleLendInput" />
+      <picker mode="selector" range="{{categoryOptions}}" bindchange="chooseLendCategory">
+        <view class="panel-picker">物品分类：{{lendForm.category}}</view>
+      </picker>
+      <input class="panel-input" type="digit" placeholder="日租金（元）" value="{{lendForm.price}}" data-field="price" bindinput="handleLendInput" />
+      <input class="panel-input" type="digit" placeholder="押金（元）" value="{{lendForm.deposit}}" data-field="deposit" bindinput="handleLendInput" />
+      <input class="panel-input" placeholder="交接地点" value="{{lendForm.location}}" data-field="location" bindinput="handleLendInput" />
+      <textarea class="panel-textarea" placeholder="补充描述（可选）" value="{{lendForm.description}}" data-field="description" bindinput="handleLendInput" />
+    </view>
+
+    <view wx:else>
+      <view class="panel-title">发布求借需求</view>
+      <input class="panel-input" placeholder="求借标题（例如：求借单反相机一天）" value="{{demandForm.title}}" data-field="title" bindinput="handleDemandInput" />
+      <picker mode="selector" range="{{categoryOptions}}" bindchange="chooseDemandCategory">
+        <view class="panel-picker">需求分类：{{demandForm.category}}</view>
+      </picker>
+      <input class="panel-input" type="digit" placeholder="预算（元）" value="{{demandForm.budget}}" data-field="budget" bindinput="handleDemandInput" />
+      <input class="panel-input" placeholder="希望交接地点" value="{{demandForm.location}}" data-field="location" bindinput="handleDemandInput" />
+      <input class="panel-input" placeholder="感谢方式（可选）" value="{{demandForm.reward}}" data-field="reward" bindinput="handleDemandInput" />
+      <textarea class="panel-textarea" placeholder="需求补充描述（可选）" value="{{demandForm.description}}" data-field="description" bindinput="handleDemandInput" />
+    </view>
+
+    <button class="submit-btn" type="primary" bindtap="submitPublish">{{mode === 'lend' ? '确认发布出借' : '确认发布求借'}}</button>
+  </view>
+</view>
