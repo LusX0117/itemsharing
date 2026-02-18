@@ -1,0 +1,103 @@
+<navigation-bar title="借用聊天" color="black" background="#f8fbff"></navigation-bar>
+
+<view wx:if="{{session}}" class="page">
+  <view class="card">
+    <view class="item-title">{{session.itemTitle}}</view>
+    <view class="item-meta">出借者：{{session.lenderName}}</view>
+    <view class="item-meta">借用者：{{session.borrowerName}}</view>
+    <view class="item-meta">状态：{{session.status}}</view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">聊天记录</view>
+    <scroll-view class="chat-list" scroll-y scroll-into-view="{{lastMessageAnchor}}">
+      <view
+        wx:for="{{session.messages}}"
+        wx:key="id"
+        id="msg-{{item.id}}"
+        class="message-row {{item.mine ? 'mine' : ''}}"
+      >
+        <view class="message-name">{{item.senderName}}</view>
+        <view class="message-bubble">{{item.text}}</view>
+        <view class="message-time">{{item.timeText}}</view>
+      </view>
+    </scroll-view>
+    <view class="composer">
+      <input class="composer-input" placeholder="输入消息..." value="{{messageText}}" bindinput="handleMessageInput" />
+      <button class="composer-btn" size="mini" bindtap="sendMessage">发送</button>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">借前照片（最多3张）</view>
+    <button class="camera-btn" size="mini" bindtap="addBeforePhoto">拍照/上传借前照片</button>
+    <view class="photo-grid">
+      <image
+        wx:for="{{session.beforePhotos}}"
+        wx:key="*this"
+        class="photo"
+        src="{{item}}"
+        mode="aspectFill"
+        data-url="{{item}}"
+        bindtap="previewPhoto"
+      ></image>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">归还后照片（最多3张）</view>
+    <button class="camera-btn" size="mini" bindtap="addAfterPhoto">拍照/上传归还后照片</button>
+    <view class="photo-grid">
+      <image
+        wx:for="{{session.afterPhotos}}"
+        wx:key="*this"
+        class="photo"
+        src="{{item}}"
+        mode="aspectFill"
+        data-url="{{item}}"
+        bindtap="previewPhoto"
+      ></image>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">前后照片对比</view>
+    <view wx:if="{{compareRows.length === 0}}" class="empty">上传借前和归还后照片后可在此对比。</view>
+    <view wx:for="{{compareRows}}" wx:key="index" class="compare-row">
+      <view class="compare-col">
+        <view class="compare-label">借前 {{item.index + 1}}</view>
+        <image
+          wx:if="{{item.before}}"
+          class="compare-photo"
+          src="{{item.before}}"
+          mode="aspectFill"
+          data-url="{{item.before}}"
+          bindtap="previewPhoto"
+        ></image>
+        <view wx:else class="compare-empty">暂无</view>
+      </view>
+      <view class="compare-col">
+        <view class="compare-label">归还后 {{item.index + 1}}</view>
+        <image
+          wx:if="{{item.after}}"
+          class="compare-photo"
+          src="{{item.after}}"
+          mode="aspectFill"
+          data-url="{{item.after}}"
+          bindtap="previewPhoto"
+        ></image>
+        <view wx:else class="compare-empty">暂无</view>
+      </view>
+    </view>
+  </view>
+
+  <button
+    wx:if="{{session.status !== '已完成' && session.beforePhotos.length > 0 && session.afterPhotos.length > 0}}"
+    class="finish-btn"
+    bindtap="markCompleted"
+  >
+    确认已归还并完成
+  </button>
+</view>
+
+<view wx:else class="missing-page">未找到借用会话</view>

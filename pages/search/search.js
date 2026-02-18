@@ -1,37 +1,83 @@
+const categoryOptions = ['全部', '教材', '电子产品', '运动器材', '生活用品', '其他'];
 const { getCurrentUser } = require('../../utils/db');
 const { startChatSession } = require('../../utils/chat-api');
 const { getHomePosts } = require('../../utils/post-api');
 
 Page({
   data: {
+    currentUser: null,
+    keyword: '',
+    activeCategory: '全部',
+    categoryOptions,
     items: [],
-    demands: []
+    filteredItems: []
   },
 
   onShow() {
-    this.loadHomeData();
+    this.refreshCurrentUser();
+    this.loadItems();
   },
 
-  async loadHomeData() {
+  refreshCurrentUser() {
+    this.setData({
+      currentUser: getCurrentUser()
+    });
+  },
+
+  async loadItems() {
     try {
       const resp = await getHomePosts();
-      this.setData({
-        items: resp.items || [],
-        demands: resp.demands || []
+      this.setData({ items: resp.items || [] }, () => {
+        this.filterItems();
       });
     } catch (err) {
       wx.showToast({ title: '帖子加载失败', icon: 'none' });
       this.setData({
         items: [],
-        demands: []
+        filteredItems: []
       });
     }
+  },
+
+  handleKeywordInput(event) {
+    this.setData({
+      keyword: event.detail.value
+    });
+    this.filterItems();
+  },
+
+  chooseCategory(event) {
+    this.setData({
+      activeCategory: event.currentTarget.dataset.category
+    });
+    this.filterItems();
+  },
+
+  filterItems() {
+    const { items, keyword, activeCategory } = this.data;
+    const q = keyword.trim().toLowerCase();
+    const filteredItems = items.filter((item) => {
+      const byCategory = activeCategory === '全部' || item.category === activeCategory;
+      const byKeyword =
+        !q ||
+        item.title.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.location.toLowerCase().includes(q);
+      return byCategory && byKeyword;
+    });
+    this.setData({ filteredItems });
+  },
+
+  goAuth() {
+    wx.navigateTo({
+      url: '/pages/auth/auth'
+    });
   },
 
   async applyBorrow(event) {
     const currentUser = getCurrentUser();
     if (!currentUser) {
-      wx.showToast({ title: '请先在“我的”中登录', icon: 'none' });
+      wx.showToast({ title: '请先登录后申请', icon: 'none' });
       return;
     }
 
