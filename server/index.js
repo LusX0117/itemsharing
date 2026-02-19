@@ -23,7 +23,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 app.use(cors());
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '12mb' }));
 
 app.get('/', (_req, res) => {
   res.send('API running');
@@ -221,6 +221,7 @@ const mapSession = (row) => ({
   status: row.status,
   beforePhotos: parseJsonArray(row.before_photos),
   afterPhotos: parseJsonArray(row.after_photos),
+  unreadCount: toNumber(row.unread_count || row.unreadCount || 0),
   createdAt: toNumber(row.created_at),
   updatedAt: toNumber(row.updated_at)
 });
@@ -233,6 +234,92 @@ const mapMessage = (row) => ({
   text: row.text,
   time: toNumber(row.time)
 });
+
+const mapRating = (row) => ({
+  id: toNumber(row.id),
+  sessionId: row.session_id,
+  raterUserId: row.rater_user_id,
+  targetUserId: row.target_user_id,
+  score: toNumber(row.score),
+  comment: row.comment || '',
+  createdAt: toNumber(row.created_at)
+});
+
+const buildRatingSummary = (rows, currentUserId = '') => {
+  const ratings = (rows || []).map(mapRating);
+  const byTarget = {};
+  ratings.forEach((rating) => {
+    const key = String(rating.targetUserId || '');
+    if (!key) {
+      return;
+    }
+    if (!byTarget[key]) {
+      byTarget[key] = {
+        userId: key,
+        averageScore: 0,
+        ratingCount: 0
+      };
+    }
+    byTarget[key].ratingCount += 1;
+    byTarget[key].averageScore += toNumber(rating.score);
+  });
+
+  Object.keys(byTarget).forEach((key) => {
+    const bucket = byTarget[key];
+    const avg = bucket.ratingCount ? (bucket.averageScore / bucket.ratingCount) : 0;
+    bucket.averageScore = Math.round(avg * 100) / 100;
+  });
+
+  return {
+    myRating: ratings.find((item) => String(item.raterUserId) === String(currentUserId || '')) || null,
+    ratings,
+    byTarget
+  };
+};
+
+const loadSessionUnreadMap = async (userId, sessionIds = []) => {
+  const sidList = (Array.isArray(sessionIds) ? sessionIds : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+  if (!userId || !sidList.length) {
+    return {};
+  }
+
+  const readResp = await supabase
+    .from('session_reads')
+    .select('session_id, last_read_message_id')
+    .eq('user_id', String(userId))
+    .in('session_id', sidList);
+  throwIfError(readResp.error, 'session_reads_query_failed');
+
+  const readMap = {};
+  (readResp.data || []).forEach((row) => {
+    readMap[String(row.session_id)] = toNumber(row.last_read_message_id);
+  });
+
+  const msgResp = await supabase
+    .from('chat_messages')
+    .select('id, session_id')
+    .in('session_id', sidList)
+    .neq('sender_user_id', String(userId));
+  throwIfError(msgResp.error, 'session_unread_messages_query_failed');
+
+  const unreadMap = {};
+  sidList.forEach((id) => {
+    unreadMap[id] = 0;
+  });
+  (msgResp.data || []).forEach((row) => {
+    const sid = String(row.session_id || '');
+    if (!sid || unreadMap[sid] === undefined) {
+      return;
+    }
+    const lastRead = toNumber(readMap[sid] || 0);
+    if (toNumber(row.id) > lastRead) {
+      unreadMap[sid] += 1;
+    }
+  });
+  return unreadMap;
+};
 
 const isPendingBorrowApproval = (status) => ['待出借者同意', '借用协商中'].includes(String(status || ''));
 
@@ -644,6 +731,50 @@ app.patch('/api/posts/demand/:id', asyncHandler(async (req, res) => {
   res.json({ demand: mapDemandPost(updated.data) });
 }));
 
+app.delete('/api/posts/item/:id', asyncHandler(async (req, res) => {
+  const id = toNumber(req.params && req.params.id);
+  const actorUserId = String(((req.body && req.body.actorUserId) || (req.query && req.query.actorUserId) || '')).trim();
+  if (!id || !actorUserId) {
+    res.status(400).json({ error: 'missing_required_fields' });
+    return;
+  }
+
+  const itemResp = await supabase.from('item_posts').select('*').eq('id', id).maybeSingle();
+  throwIfError(itemResp.error, 'item_query_failed');
+  if (!itemResp.data) {
+    res.status(404).json({ error: 'item_not_found' });
+    return;
+  }
+
+  await ensureCanManageItem(actorUserId, itemResp.data);
+
+  const deletedResp = await supabase.from('item_posts').delete().eq('id', id);
+  throwIfError(deletedResp.error, 'item_delete_failed');
+  res.json({ ok: true, id });
+}));
+
+app.delete('/api/posts/demand/:id', asyncHandler(async (req, res) => {
+  const id = String((req.params && req.params.id) || '').trim();
+  const actorUserId = String(((req.body && req.body.actorUserId) || (req.query && req.query.actorUserId) || '')).trim();
+  if (!id || !actorUserId) {
+    res.status(400).json({ error: 'missing_required_fields' });
+    return;
+  }
+
+  const demandResp = await supabase.from('demand_posts').select('*').eq('id', id).maybeSingle();
+  throwIfError(demandResp.error, 'demand_query_failed');
+  if (!demandResp.data) {
+    res.status(404).json({ error: 'demand_not_found' });
+    return;
+  }
+
+  await ensureCanManageDemand(actorUserId, demandResp.data);
+
+  const deletedResp = await supabase.from('demand_posts').delete().eq('id', id);
+  throwIfError(deletedResp.error, 'demand_delete_failed');
+  res.json({ ok: true, id });
+}));
+
 app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
   const {
     itemId,
@@ -667,6 +798,7 @@ app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
     .eq('borrower_user_id', String(borrowerUserId))
     .neq('status', '已完成')
     .neq('status', '已拒绝')
+    .neq('status', '已取消')
     .order('updated_at', { ascending: false })
     .limit(1);
   throwIfError(existingResp.error, 'session_query_failed');
@@ -721,13 +853,22 @@ app.get('/api/chat/sessions', asyncHandler(async (req, res) => {
     .order('updated_at', { ascending: false });
   throwIfError(rows.error, 'sessions_query_failed');
 
+  const list = rows.data || [];
+  const unreadMap = await loadSessionUnreadMap(String(userId), list.map((row) => row.id));
+  const mappedSessions = list.map((row) => ({
+    ...mapSession(row),
+    unreadCount: toNumber(unreadMap[String(row.id)] || 0)
+  }));
+  const unreadTotal = mappedSessions.reduce((sum, session) => sum + toNumber(session.unreadCount), 0);
+
   res.json({
-    sessions: (rows.data || []).map(mapSession)
+    sessions: mappedSessions,
+    unreadTotal
   });
 }));
 
 app.get('/api/chat/session', asyncHandler(async (req, res) => {
-  const { sessionId } = req.query || {};
+  const { sessionId, userId } = req.query || {};
   if (!sessionId) {
     res.status(400).json({ error: 'missing_session_id' });
     return;
@@ -739,7 +880,18 @@ app.get('/api/chat/session', asyncHandler(async (req, res) => {
     res.status(404).json({ error: 'session_not_found' });
     return;
   }
-  res.json({ session: mapSession(result.data) });
+
+  const ratingResp = await supabase
+    .from('session_ratings')
+    .select('*')
+    .eq('session_id', String(sessionId))
+    .order('created_at', { ascending: false });
+  throwIfError(ratingResp.error, 'session_ratings_query_failed');
+
+  res.json({
+    session: mapSession(result.data),
+    ratingSummary: buildRatingSummary(ratingResp.data || [], String(userId || ''))
+  });
 }));
 
 app.get('/api/chat/messages', asyncHandler(async (req, res) => {
@@ -764,6 +916,63 @@ app.get('/api/chat/messages', asyncHandler(async (req, res) => {
 
   res.json({
     messages: (rows.data || []).map(mapMessage)
+  });
+}));
+
+app.post('/api/chat/session/read', asyncHandler(async (req, res) => {
+  const { sessionId, userId, lastReadMessageId } = req.body || {};
+  const sid = String(sessionId || '').trim();
+  const uid = String(userId || '').trim();
+  if (!sid || !uid) {
+    res.status(400).json({ error: 'missing_required_fields' });
+    return;
+  }
+
+  const sessionResp = await supabase.from('chat_sessions').select('*').eq('id', sid).maybeSingle();
+  throwIfError(sessionResp.error, 'session_query_failed');
+  const session = sessionResp.data;
+  if (!session) {
+    res.status(404).json({ error: 'session_not_found' });
+    return;
+  }
+
+  const inSession =
+    uid === String(session.lender_user_id) ||
+    uid === String(session.borrower_user_id);
+  if (!inSession) {
+    res.status(403).json({ error: 'forbidden_actor' });
+    return;
+  }
+
+  const latestMsgResp = await supabase
+    .from('chat_messages')
+    .select('id')
+    .eq('session_id', sid)
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  throwIfError(latestMsgResp.error, 'messages_query_failed');
+  const maxMessageId = toNumber(latestMsgResp.data && latestMsgResp.data.id);
+  const requestedReadId = toNumber(lastReadMessageId);
+  const nextReadId = requestedReadId > 0 ? Math.min(requestedReadId, maxMessageId) : maxMessageId;
+
+  const upsertResp = await supabase
+    .from('session_reads')
+    .upsert({
+      user_id: uid,
+      session_id: sid,
+      last_read_message_id: nextReadId,
+      updated_at: Date.now()
+    }, {
+      onConflict: 'user_id,session_id'
+    });
+  throwIfError(upsertResp.error, 'session_read_upsert_failed');
+
+  res.json({
+    ok: true,
+    sessionId: sid,
+    lastReadMessageId: nextReadId,
+    unreadCount: 0
   });
 }));
 
@@ -822,9 +1031,14 @@ app.post('/api/chat/messages', asyncHandler(async (req, res) => {
 }));
 
 app.patch('/api/chat/session/action', asyncHandler(async (req, res) => {
-  const { sessionId, actorUserId, action } = req.body || {};
+  const { sessionId, actorUserId, action, reason } = req.body || {};
   if (!sessionId || !actorUserId || !action) {
     res.status(400).json({ error: 'missing_required_fields' });
+    return;
+  }
+  const actionReason = String(reason || '').trim();
+  if (['reject_borrow', 'reject_return', 'cancel_borrow'].includes(String(action)) && !actionReason) {
+    res.status(400).json({ error: 'missing_action_reason' });
     return;
   }
 
@@ -862,7 +1076,7 @@ app.patch('/api/chat/session/action', asyncHandler(async (req, res) => {
       return;
     }
     nextStatus = '已拒绝';
-    systemText = '出借者已拒绝借用申请。';
+    systemText = `出借者已拒绝借用申请。原因：${actionReason}`;
   } else if (action === 'request_return') {
     if (!isBorrower || currentStatus !== '借用中') {
       res.status(409).json({ error: 'invalid_status_transition' });
@@ -889,7 +1103,15 @@ app.patch('/api/chat/session/action', asyncHandler(async (req, res) => {
       return;
     }
     nextStatus = '借用中';
-    systemText = '出借者退回了归还确认，借用状态恢复为借用中。';
+    systemText = `出借者退回了归还确认，借用状态恢复为借用中。原因：${actionReason}`;
+  } else if (action === 'cancel_borrow') {
+    const canCancelStatus = ['待出借者同意', '借用协商中', '借用中', '待确认归还'].includes(currentStatus);
+    if (!isBorrower || !canCancelStatus) {
+      res.status(409).json({ error: 'invalid_status_transition' });
+      return;
+    }
+    nextStatus = '已取消';
+    systemText = `借用者已取消本次借用。原因：${actionReason}`;
   } else {
     res.status(400).json({ error: 'unsupported_action' });
     return;
@@ -979,6 +1201,94 @@ app.patch('/api/chat/session/status', asyncHandler(async (req, res) => {
   res.json({ session: mapSession(updatedResp.data) });
 }));
 
+app.get('/api/chat/session/ratings', asyncHandler(async (req, res) => {
+  const { sessionId, userId } = req.query || {};
+  if (!sessionId) {
+    res.status(400).json({ error: 'missing_session_id' });
+    return;
+  }
+
+  const sessionResp = await supabase.from('chat_sessions').select('*').eq('id', String(sessionId)).maybeSingle();
+  throwIfError(sessionResp.error, 'session_query_failed');
+  if (!sessionResp.data) {
+    res.status(404).json({ error: 'session_not_found' });
+    return;
+  }
+
+  const ratingResp = await supabase
+    .from('session_ratings')
+    .select('*')
+    .eq('session_id', String(sessionId))
+    .order('created_at', { ascending: false });
+  throwIfError(ratingResp.error, 'session_ratings_query_failed');
+
+  res.json({
+    ratingSummary: buildRatingSummary(ratingResp.data || [], String(userId || ''))
+  });
+}));
+
+app.post('/api/chat/session/rate', asyncHandler(async (req, res) => {
+  const { sessionId, raterUserId, score, comment } = req.body || {};
+  const finalScore = toNumber(score);
+  if (!sessionId || !raterUserId || !finalScore) {
+    res.status(400).json({ error: 'missing_required_fields' });
+    return;
+  }
+  if (finalScore < 1 || finalScore > 5) {
+    res.status(400).json({ error: 'invalid_score' });
+    return;
+  }
+
+  const sessionResp = await supabase.from('chat_sessions').select('*').eq('id', String(sessionId)).maybeSingle();
+  throwIfError(sessionResp.error, 'session_query_failed');
+  const session = sessionResp.data;
+  if (!session) {
+    res.status(404).json({ error: 'session_not_found' });
+    return;
+  }
+
+  if (String(session.status) !== '已完成') {
+    res.status(409).json({ error: 'session_not_finished' });
+    return;
+  }
+
+  const actorId = String(raterUserId);
+  const isLender = actorId === String(session.lender_user_id);
+  const isBorrower = actorId === String(session.borrower_user_id);
+  if (!isLender && !isBorrower) {
+    res.status(403).json({ error: 'forbidden_actor' });
+    return;
+  }
+
+  const targetUserId = isLender ? String(session.borrower_user_id) : String(session.lender_user_id);
+  const payload = {
+    session_id: String(sessionId),
+    rater_user_id: actorId,
+    target_user_id: targetUserId,
+    score: finalScore,
+    comment: String(comment || '').trim(),
+    created_at: Date.now()
+  };
+  const upsertResp = await supabase
+    .from('session_ratings')
+    .upsert(payload, { onConflict: 'session_id,rater_user_id' })
+    .select('*')
+    .single();
+  throwIfError(upsertResp.error, 'session_rate_failed');
+
+  const ratingResp = await supabase
+    .from('session_ratings')
+    .select('*')
+    .eq('session_id', String(sessionId))
+    .order('created_at', { ascending: false });
+  throwIfError(ratingResp.error, 'session_ratings_query_failed');
+
+  res.json({
+    rating: mapRating(upsertResp.data),
+    ratingSummary: buildRatingSummary(ratingResp.data || [], actorId)
+  });
+}));
+
 app.use((err, _req, res, _next) => {
   console.error('[server_error]', err);
   if (err.code === 'forbidden') {
@@ -1001,6 +1311,6 @@ Promise.resolve()
     });
   })
   .catch((err) => {
-    console.error('服务初始化失败，请先在 Supabase 创建 users/chat_sessions/chat_messages/item_posts/demand_posts 五张表。', err);
+    console.error('服务初始化失败，请先在 Supabase 创建 users/chat_sessions/chat_messages/item_posts/demand_posts/session_ratings/session_reads 七张表。', err);
     process.exit(1);
   });

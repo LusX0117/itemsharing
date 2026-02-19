@@ -47,6 +47,34 @@ page {
   line-height: 1.4;
 }
 
+.stage-list {
+  margin-top: 10rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.stage-chip {
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  font-size: 21rpx;
+  color: #64748b;
+  background: #edf2f7;
+  border: 1rpx solid #e2e8f0;
+}
+
+.stage-chip.done {
+  color: #0f766e;
+  background: #ccfbf1;
+  border-color: #99f6e4;
+}
+
+.stage-chip.current {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #bfdbfe;
+}
+
 .action-row {
   margin-top: 12rpx;
   display: flex;
@@ -177,6 +205,36 @@ page {
 .return-btn {
   background: #0ea5e9 !important;
   color: #ffffff !important;
+}
+
+.cancel-btn {
+  background: #f97316 !important;
+  color: #ffffff !important;
+}
+
+.rate-btn {
+  margin-top: 12rpx;
+  background: #2563eb !important;
+  color: #ffffff !important;
+}
+
+.rating-meta {
+  margin-top: 6rpx;
+  font-size: 23rpx;
+  color: #475569;
+}
+
+.rating-comment {
+  margin-top: 10rpx;
+  font-size: 23rpx;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.rating-tip {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #94a3b8;
 }
 
 .camera-btn {
