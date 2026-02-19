@@ -10,7 +10,8 @@ const formatDateTime = (timestamp) => {
 Page({
   data: {
     currentUser: null,
-    sessions: []
+    sessions: [],
+    unreadTotal: 0
   },
 
   async onShow() {
@@ -27,7 +28,8 @@ Page({
   async loadSessions() {
     const currentUser = getCurrentUser();
     if (!currentUser) {
-      this.setData({ sessions: [] });
+      this.setData({ sessions: [], unreadTotal: 0 });
+      this.updateTabUnreadBadge(0);
       return;
     }
 
@@ -36,13 +38,32 @@ Page({
       const sessions = (resp.sessions || []).map((session) => ({
         ...session,
         updatedAtText: formatDateTime(session.updatedAt),
-        myRole: String(session.borrowerUserId) === String(currentUser.id) ? '借用者' : '出借者'
+        myRole: String(session.borrowerUserId) === String(currentUser.id) ? '借用者' : '出借者',
+        unreadCount: Number(session.unreadCount || 0),
+        unreadText: Number(session.unreadCount || 0) > 99 ? '99+' : String(Number(session.unreadCount || 0))
       }));
-      this.setData({ sessions });
+      const unreadTotal = Number(resp.unreadTotal || sessions.reduce((sum, item) => sum + Number(item.unreadCount || 0), 0));
+      this.setData({ sessions, unreadTotal });
+      this.updateTabUnreadBadge(unreadTotal);
     } catch (err) {
-      this.setData({ sessions: [] });
+      this.setData({ sessions: [], unreadTotal: 0 });
+      this.updateTabUnreadBadge(0);
       wx.showToast({ title: '聊天服务不可用', icon: 'none' });
     }
+  },
+
+  updateTabUnreadBadge(total) {
+    const value = Number(total || 0);
+    if (value > 0) {
+      wx.setTabBarBadge({
+        index: 3,
+        text: value > 99 ? '99+' : String(value)
+      });
+      return;
+    }
+    wx.removeTabBarBadge({
+      index: 3
+    });
   },
 
   goAuth() {

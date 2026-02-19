@@ -50,6 +50,18 @@ const updateDemandPost = (id, payload) => request({
   data: payload
 });
 
+const deleteItemPost = (id, payload) => request({
+  url: `/api/posts/item/${encodeURIComponent(String(id))}`,
+  method: 'DELETE',
+  data: payload
+});
+
+const deleteDemandPost = (id, payload) => request({
+  url: `/api/posts/demand/${encodeURIComponent(String(id))}`,
+  method: 'DELETE',
+  data: payload
+});
+
 module.exports = {
   POST_BASE_URL,
   getHomePosts,
@@ -57,5 +69,7 @@ module.exports = {
   createItemPost,
   createDemandPost,
   updateItemPost,
-  updateDemandPost
+  updateDemandPost,
+  deleteItemPost,
+  deleteDemandPost
 };
