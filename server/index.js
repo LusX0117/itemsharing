@@ -278,6 +278,27 @@ const ensureCanManageDemand = async (actorUserId, demandRow) => {
 
 const syncSeedUsers = async () => {
   for (const user of seedUsers) {
+    const byPhoneResp = await supabase
+      .from('users')
+      .select('id')
+      .eq('phone', user.phone)
+      .maybeSingle();
+    throwIfError(byPhoneResp.error, 'seed_users_lookup_failed');
+
+    // If admin phone already belongs to an existing account, promote that account.
+    if (byPhoneResp.data && String(byPhoneResp.data.id) !== String(user.id) && user.isAdmin) {
+      const promotedResp = await supabase
+        .from('users')
+        .update({
+          nickname: user.nickname,
+          password_hash: buildPasswordHash(user.password),
+          is_admin: true
+        })
+        .eq('id', String(byPhoneResp.data.id));
+      throwIfError(promotedResp.error, 'seed_admin_promote_failed');
+      continue;
+    }
+
     const payload = {
       id: user.id,
       phone: user.phone,
