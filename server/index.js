@@ -288,7 +288,7 @@ const syncSeedUsers = async () => {
     };
 
     const { error } = await supabase.from('users').upsert(payload, {
-      onConflict: 'phone'
+      onConflict: 'id'
     });
     throwIfError(error, 'seed_users_failed');
   }
