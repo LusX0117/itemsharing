@@ -57,6 +57,12 @@ const updateChatSessionStatus = (payload) => request({
   data: payload
 });
 
+const runChatSessionAction = (payload) => request({
+  url: '/api/chat/session/action',
+  method: 'PATCH',
+  data: payload
+});
+
 module.exports = {
   CHAT_BASE_URL,
   startChatSession,
@@ -65,5 +71,6 @@ module.exports = {
   getChatMessages,
   sendChatMessage,
   updateChatSessionPhotos,
-  updateChatSessionStatus
+  updateChatSessionStatus,
+  runChatSessionAction
 };

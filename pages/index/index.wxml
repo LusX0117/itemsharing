@@ -31,6 +31,10 @@
       <view class="demand-meta">预算：¥{{item.budget}} · 分类：{{item.category}}</view>
       <view class="demand-reward">{{item.reward}}</view>
       <view class="demand-desc">{{item.description}}</view>
+      <view class="demand-footer">
+        <view class="demand-state">状态：{{item.status}}</view>
+        <button class="lend-btn" size="mini" data-id="{{item.id}}" bindtap="lendToDemand">我要借出</button>
+      </view>
     </view>
   </view>
 </scroll-view>
