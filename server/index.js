@@ -230,6 +230,8 @@ const mapMessage = (row) => ({
   time: toNumber(row.time)
 });
 
+const isPendingBorrowApproval = (status) => ['待出借者同意', '借用协商中'].includes(String(status || ''));
+
 const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
@@ -660,6 +662,7 @@ app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
     .eq('lender_user_id', String(lenderUserId))
     .eq('borrower_user_id', String(borrowerUserId))
     .neq('status', '已完成')
+    .neq('status', '已拒绝')
     .order('updated_at', { ascending: false })
     .limit(1);
   throwIfError(existingResp.error, 'session_query_failed');
@@ -678,7 +681,7 @@ app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
     lender_name: String(lenderName),
     borrower_user_id: String(borrowerUserId),
     borrower_name: String(borrowerName),
-    status: '借用协商中',
+    status: '待出借者同意',
     before_photos: [],
     after_photos: [],
     created_at: now,
@@ -691,7 +694,7 @@ app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
     session_id: sessionPayload.id,
     sender_user_id: 'system',
     sender_name: '系统',
-    text: '已发起借用申请，请双方沟通交接与归还细节。',
+    text: '借用申请已发起，等待出借者同意。',
     time: now
   };
   const insertedMsg = await supabase.from('chat_messages').insert(tipMessagePayload);
@@ -801,20 +804,116 @@ app.post('/api/chat/messages', asyncHandler(async (req, res) => {
   };
   const insertedResp = await supabase.from('chat_messages').insert(messagePayload).select('*').single();
   throwIfError(insertedResp.error, 'message_insert_failed');
-
-  const nextStatus = session.status === '借用协商中' ? '借用中' : session.status;
-  const updateResp = await supabase
+  const touchResp = await supabase
     .from('chat_sessions')
     .update({
-      updated_at: now,
-      status: nextStatus
+      updated_at: now
     })
     .eq('id', String(sessionId));
-  throwIfError(updateResp.error, 'session_update_failed');
+  throwIfError(touchResp.error, 'session_touch_failed');
 
   res.json({
     message: mapMessage(insertedResp.data)
   });
+}));
+
+app.patch('/api/chat/session/action', asyncHandler(async (req, res) => {
+  const { sessionId, actorUserId, action } = req.body || {};
+  if (!sessionId || !actorUserId || !action) {
+    res.status(400).json({ error: 'missing_required_fields' });
+    return;
+  }
+
+  const sessionResp = await supabase.from('chat_sessions').select('*').eq('id', String(sessionId)).maybeSingle();
+  throwIfError(sessionResp.error, 'session_query_failed');
+  const session = sessionResp.data;
+  if (!session) {
+    res.status(404).json({ error: 'session_not_found' });
+    return;
+  }
+
+  const actorId = String(actorUserId);
+  const isLender = actorId === String(session.lender_user_id);
+  const isBorrower = actorId === String(session.borrower_user_id);
+  if (!isLender && !isBorrower) {
+    res.status(403).json({ error: 'forbidden_actor' });
+    return;
+  }
+
+  const currentStatus = String(session.status || '');
+  const now = Date.now();
+  let nextStatus = currentStatus;
+  let systemText = '';
+
+  if (action === 'approve_borrow') {
+    if (!isLender || !isPendingBorrowApproval(currentStatus)) {
+      res.status(409).json({ error: 'invalid_status_transition' });
+      return;
+    }
+    nextStatus = '借用中';
+    systemText = '出借者已同意借用申请，借用单进入借用中。';
+  } else if (action === 'reject_borrow') {
+    if (!isLender || !isPendingBorrowApproval(currentStatus)) {
+      res.status(409).json({ error: 'invalid_status_transition' });
+      return;
+    }
+    nextStatus = '已拒绝';
+    systemText = '出借者已拒绝借用申请。';
+  } else if (action === 'request_return') {
+    if (!isBorrower || currentStatus !== '借用中') {
+      res.status(409).json({ error: 'invalid_status_transition' });
+      return;
+    }
+    const beforePhotos = parseJsonArray(session.before_photos);
+    const afterPhotos = parseJsonArray(session.after_photos);
+    if (!beforePhotos.length || !afterPhotos.length) {
+      res.status(400).json({ error: 'missing_compare_photos' });
+      return;
+    }
+    nextStatus = '待确认归还';
+    systemText = '借用者已发起归还确认，等待出借者确认。';
+  } else if (action === 'confirm_return') {
+    if (!isLender || currentStatus !== '待确认归还') {
+      res.status(409).json({ error: 'invalid_status_transition' });
+      return;
+    }
+    nextStatus = '已完成';
+    systemText = '出借者已确认归还，本次借用已完成。';
+  } else if (action === 'reject_return') {
+    if (!isLender || currentStatus !== '待确认归还') {
+      res.status(409).json({ error: 'invalid_status_transition' });
+      return;
+    }
+    nextStatus = '借用中';
+    systemText = '出借者退回了归还确认，借用状态恢复为借用中。';
+  } else {
+    res.status(400).json({ error: 'unsupported_action' });
+    return;
+  }
+
+  const updatedResp = await supabase
+    .from('chat_sessions')
+    .update({
+      status: nextStatus,
+      updated_at: now
+    })
+    .eq('id', String(sessionId))
+    .select('*')
+    .single();
+  throwIfError(updatedResp.error, 'session_action_update_failed');
+
+  if (systemText) {
+    const msgResp = await supabase.from('chat_messages').insert({
+      session_id: String(sessionId),
+      sender_user_id: 'system',
+      sender_name: '系统',
+      text: systemText,
+      time: now
+    });
+    throwIfError(msgResp.error, 'session_action_message_failed');
+  }
+
+  res.json({ session: mapSession(updatedResp.data) });
 }));
 
 app.patch('/api/chat/session/photos', asyncHandler(async (req, res) => {

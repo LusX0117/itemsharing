@@ -31,6 +31,19 @@ page {
   margin-top: 6rpx;
 }
 
+.status-tip {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #b45309;
+  line-height: 1.4;
+}
+
+.action-row {
+  margin-top: 12rpx;
+  display: flex;
+  gap: 10rpx;
+}
+
 .section-title {
   font-size: 27rpx;
   font-weight: 700;
@@ -40,41 +53,76 @@ page {
 .chat-list {
   max-height: 420rpx;
   min-height: 220rpx;
+  padding-right: 4rpx;
 }
 
-.message-row {
-  margin-bottom: 14rpx;
+.timeline {
+  border-left: 2rpx solid #d7e7e3;
+  margin-left: 10rpx;
+  padding-left: 18rpx;
 }
 
-.message-row.mine {
-  text-align: right;
+.timeline-item {
+  position: relative;
+  margin-bottom: 16rpx;
 }
 
-.message-name {
-  font-size: 20rpx;
-  color: var(--muted);
-  margin-bottom: 6rpx;
+.timeline-dot {
+  position: absolute;
+  left: -25rpx;
+  top: 10rpx;
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: #93c5bd;
 }
 
-.message-bubble {
-  display: inline-block;
-  max-width: 82%;
-  background: #edf5f3;
+.timeline-dot.mine {
+  background: #0f766e;
+}
+
+.timeline-dot.system {
+  background: #f59e0b;
+}
+
+.timeline-content {
+  background: #f8fbfa;
+  border: 1rpx solid #e5eeeb;
   border-radius: 14rpx;
-  padding: 14rpx 16rpx;
-  font-size: 24rpx;
-  color: #0f172a;
-  text-align: left;
+  padding: 12rpx 14rpx;
 }
 
-.message-row.mine .message-bubble {
-  background: var(--brand-weak);
+.timeline-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12rpx;
 }
 
-.message-time {
+.timeline-name {
+  font-size: 22rpx;
+  color: #334155;
+  font-weight: 600;
+}
+
+.timeline-time {
   font-size: 20rpx;
   color: #94a3b8;
-  margin-top: 6rpx;
+}
+
+.timeline-text {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: #0f172a;
+}
+
+.timeline-text.mine {
+  color: #0b766c;
+}
+
+.timeline-text.system {
+  color: #92400e;
 }
 
 .composer {
@@ -97,6 +145,21 @@ page {
 
 .composer-btn {
   background: var(--brand) !important;
+  color: #ffffff !important;
+}
+
+.agree-btn {
+  background: var(--brand) !important;
+  color: #ffffff !important;
+}
+
+.reject-btn {
+  background: #b91c1c !important;
+  color: #ffffff !important;
+}
+
+.return-btn {
+  background: #0ea5e9 !important;
   color: #ffffff !important;
 }
 

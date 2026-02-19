@@ -111,6 +111,10 @@ page {
   font-weight: 700;
 }
 
+.demand-card {
+  position: relative;
+}
+
 .demand-meta {
   color: var(--muted);
   margin-top: 8rpx;
@@ -127,6 +131,25 @@ page {
   margin-top: 8rpx;
   color: #374151;
   font-size: 22rpx;
+}
+
+.demand-footer {
+  margin-top: 14rpx;
+  display: block;
+  padding-right: 220rpx;
+}
+
+.demand-state {
+  font-size: 22rpx;
+  color: var(--muted);
+}
+
+.lend-btn {
+  position: absolute;
+  right: 24rpx;
+  bottom: 24rpx;
+  background: #0ea5e9 !important;
+  color: #ffffff !important;
 }
 
 .empty {

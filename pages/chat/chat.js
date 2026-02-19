@@ -4,7 +4,7 @@ const {
   getChatMessages,
   sendChatMessage,
   updateChatSessionPhotos,
-  updateChatSessionStatus
+  runChatSessionAction
 } = require('../../utils/chat-api');
 
 const MAX_PHOTO_COUNT = 3;
@@ -29,17 +29,31 @@ const buildCompareRows = (beforePhotos, afterPhotos) => {
   return rows;
 };
 
+const isPendingBorrowApproval = (status) => ['待出借者同意', '借用协商中'].includes(String(status || ''));
+
+const resolveStatusByMessages = (status, messages) => {
+  const raw = String(status || '');
+  if (raw !== '借用中') {
+    return raw;
+  }
+  const hasApproveMarker = (messages || []).some(
+    (msg) => String(msg.senderUserId) === 'system' && String(msg.text || '').includes('同意借用')
+  );
+  return hasApproveMarker ? '借用中' : '待出借者同意';
+};
+
 Page({
   data: {
     sessionId: '',
     session: null,
+    currentUser: null,
     messageText: '',
     compareRows: [],
-    lastMessageAnchor: ''
+    lastMessageAnchor: '',
+    loading: true
   },
 
   pollTimer: null,
-  lastMessageId: 0,
 
   onLoad(options) {
     this.setData({
@@ -48,6 +62,9 @@ Page({
   },
 
   async onShow() {
+    this.setData({
+      currentUser: getCurrentUser()
+    });
     await this.refreshAll();
     this.startPolling();
   },
@@ -75,35 +92,61 @@ Page({
   },
 
   mapMessages(messages) {
+    const currentUser = this.data.currentUser || getCurrentUser() || {};
     return (messages || []).map((message) => ({
       ...message,
       sender: message.senderUserId === 'system' ? 'system' : 'user',
-      mine: String(message.senderUserId) === String((getCurrentUser() || {}).id),
+      mine: String(message.senderUserId) === String(currentUser.id || ''),
       timeText: formatDateTime(message.time)
     }));
+  },
+
+  buildSessionView(session) {
+    const currentUser = this.data.currentUser || getCurrentUser() || null;
+    const userId = currentUser ? String(currentUser.id) : '';
+    const isLender = userId && userId === String(session.lenderUserId);
+    const isBorrower = userId && userId === String(session.borrowerUserId);
+    const pendingBorrowApproval = isPendingBorrowApproval(session.status);
+
+    return {
+      ...session,
+      isLender,
+      isBorrower,
+      pendingBorrowApproval,
+      canApproveBorrow: Boolean(isLender && pendingBorrowApproval),
+      canRejectBorrow: Boolean(isLender && pendingBorrowApproval),
+      canRequestReturn: Boolean(isBorrower && String(session.status) === '借用中'),
+      canConfirmReturn: Boolean(isLender && String(session.status) === '待确认归还'),
+      canRejectReturn: Boolean(isLender && String(session.status) === '待确认归还')
+    };
   },
 
   applySessionAndMessages(session, mappedMessages) {
     const beforePhotos = session.beforePhotos || [];
     const afterPhotos = session.afterPhotos || [];
     const lastMessage = mappedMessages[mappedMessages.length - 1];
-    this.lastMessageId = lastMessage ? Number(lastMessage.id) : 0;
+    const normalizedStatus = resolveStatusByMessages(session.status, mappedMessages);
+
+    const sessionWithView = this.buildSessionView({
+      ...session,
+      status: normalizedStatus,
+      beforePhotos,
+      afterPhotos,
+      messages: mappedMessages
+    });
 
     this.setData({
-      session: {
-        ...session,
-        beforePhotos,
-        afterPhotos,
-        messages: mappedMessages
-      },
+      session: sessionWithView,
       compareRows: buildCompareRows(beforePhotos, afterPhotos),
-      lastMessageAnchor: lastMessage ? `msg-${lastMessage.id}` : ''
+      lastMessageAnchor: lastMessage ? `msg-${lastMessage.id}` : '',
+      loading: false
     });
   },
 
   async refreshAll() {
     const { sessionId } = this.data;
     if (!sessionId) {
+      this.setData({ loading: false });
       return;
     }
 
@@ -115,15 +158,15 @@ Page({
 
       const session = sessionResp.session;
       if (!session) {
-        this.setData({ session: null });
+        this.setData({ session: null, loading: false });
         return;
       }
 
       const mappedMessages = this.mapMessages(messageResp.messages || []);
       this.applySessionAndMessages(session, mappedMessages);
     } catch (err) {
-      this.setData({ session: null });
-      wx.showToast({ title: '聊天服务不可用', icon: 'none' });
+      this.setData({ loading: false });
+      wx.showToast({ title: '聊天数据加载失败', icon: 'none' });
     }
   },
 
@@ -136,7 +179,7 @@ Page({
     try {
       const [sessionResp, messageResp] = await Promise.all([
         getChatSession(sessionId),
-        getChatMessages(sessionId, this.lastMessageId || undefined)
+        getChatMessages(sessionId)
       ]);
 
       const latestSession = sessionResp.session;
@@ -144,20 +187,8 @@ Page({
         return;
       }
 
-      const incremental = this.mapMessages(messageResp.messages || []);
-      const currentMessages = session.messages || [];
-      let mergedMessages = currentMessages;
-      if (incremental.length) {
-        const map = {};
-        currentMessages.forEach((msg) => {
-          map[String(msg.id)] = msg;
-        });
-        incremental.forEach((msg) => {
-          map[String(msg.id)] = msg;
-        });
-        mergedMessages = Object.values(map).sort((a, b) => Number(a.id) - Number(b.id));
-      }
-      this.applySessionAndMessages(latestSession, mergedMessages);
+      const allMessages = this.mapMessages(messageResp.messages || []);
+      this.applySessionAndMessages(latestSession, allMessages);
     } catch (err) {
       // polling failure should be silent to avoid toast spam
     }
@@ -175,7 +206,7 @@ Page({
       return;
     }
 
-    const currentUser = getCurrentUser();
+    const currentUser = this.data.currentUser || getCurrentUser();
     if (!currentUser) {
       wx.showToast({ title: '请先登录', icon: 'none' });
       return;
@@ -194,6 +225,94 @@ Page({
     } catch (err) {
       wx.showToast({ title: '发送失败', icon: 'none' });
     }
+  },
+
+  async runSessionAction(action, successText, needComparePhotos = false) {
+    const session = this.data.session;
+    const currentUser = this.data.currentUser || getCurrentUser();
+    if (!session || !currentUser) {
+      return;
+    }
+
+    if (needComparePhotos) {
+      if (!(session.beforePhotos || []).length || !(session.afterPhotos || []).length) {
+        wx.showToast({ title: '请先补充借前和归还后照片', icon: 'none' });
+        return;
+      }
+    }
+
+    try {
+      await runChatSessionAction({
+        sessionId: this.data.sessionId,
+        actorUserId: String(currentUser.id),
+        action
+      });
+      await this.refreshAll();
+      wx.showToast({ title: successText, icon: 'success' });
+    } catch (err) {
+      const msg = String((err && err.message) || '');
+      if (msg.includes('invalid_status_transition')) {
+        wx.showToast({ title: '状态已变化，请刷新后重试', icon: 'none' });
+        await this.refreshAll();
+        return;
+      }
+      if (msg.includes('missing_compare_photos')) {
+        wx.showToast({ title: '请先上传借前和归还后照片', icon: 'none' });
+        return;
+      }
+      wx.showToast({ title: '操作失败', icon: 'none' });
+    }
+  },
+
+  approveBorrow() {
+    this.runSessionAction('approve_borrow', '已同意借用');
+  },
+
+  rejectBorrow() {
+    wx.showModal({
+      title: '确认拒绝借用？',
+      success: (res) => {
+        if (res.confirm) {
+          this.runSessionAction('reject_borrow', '已拒绝借用');
+        }
+      }
+    });
+  },
+
+  requestReturn() {
+    wx.showModal({
+      title: '发起归还确认？',
+      content: '发起后需出借者确认才能完成借用。',
+      success: (res) => {
+        if (res.confirm) {
+          this.runSessionAction('request_return', '已发起归还确认', true);
+        }
+      }
+    });
+  },
+
+  confirmReturn() {
+    wx.showModal({
+      title: '确认已归还？',
+      content: '确认后本次借用会标记为已完成。',
+      success: (res) => {
+        if (res.confirm) {
+          this.runSessionAction('confirm_return', '已确认归还');
+        }
+      }
+    });
+  },
+
+  rejectReturn() {
+    wx.showModal({
+      title: '退回归还确认？',
+      content: '退回后状态将恢复为借用中。',
+      success: (res) => {
+        if (res.confirm) {
+          this.runSessionAction('reject_return', '已退回归还确认');
+        }
+      }
+    });
   },
 
   addBeforePhoto() {
@@ -254,38 +373,5 @@ Page({
       current: url,
       urls
     });
-  },
-
-  async markCompleted() {
-    const session = this.data.session;
-    if (!session) {
-      return;
-    }
-
-    if (!(session.beforePhotos || []).length || !(session.afterPhotos || []).length) {
-      wx.showToast({ title: '请先补充借前和归还后照片', icon: 'none' });
-      return;
-    }
-
-    try {
-      await updateChatSessionStatus({
-        sessionId: this.data.sessionId,
-        status: '已完成'
-      });
-
-      const currentUser = getCurrentUser();
-      if (currentUser) {
-        await sendChatMessage({
-          sessionId: this.data.sessionId,
-          senderUserId: 'system',
-          senderName: '系统',
-          text: `${currentUser.nickname} 将该借用单标记为已完成。`
-        });
-      }
-      await this.refreshAll();
-      wx.showToast({ title: '已标记完成', icon: 'success' });
-    } catch (err) {
-      wx.showToast({ title: '操作失败', icon: 'none' });
-    }
   }
 });
