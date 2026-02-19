@@ -1,0 +1,45 @@
+<navigation-bar title="帖子管理" color="black" background="#f8fbff"></navigation-bar>
+
+<scroll-view class="scrollarea" scroll-y>
+  <view class="page">
+    <view class="card tip">
+      <view class="tip-title">{{isAdmin ? '管理员模式' : '我的帖子'}}</view>
+      <view class="tip-desc">{{isAdmin ? '可管理全站帖子：修改、隐藏、恢复、状态切换' : '可管理你发布的帖子：修改、隐藏、恢复、状态切换'}}</view>
+    </view>
+
+    <view class="card tabs">
+      <view class="tab {{activeTab === 'item' ? 'active' : ''}}" data-tab="item" bindtap="switchTab">出借帖子（{{manageItems.length}}）</view>
+      <view class="tab {{activeTab === 'demand' ? 'active' : ''}}" data-tab="demand" bindtap="switchTab">求借帖子（{{manageDemands.length}}）</view>
+    </view>
+
+    <view wx:if="{{loading}}" class="card empty">加载中...</view>
+
+    <block wx:if="{{!loading && activeTab === 'item'}}">
+      <view wx:if="{{manageItems.length === 0}}" class="card empty">暂无出借帖子</view>
+      <view wx:for="{{manageItems}}" wx:key="id" class="card manage-item">
+        <view class="manage-head">
+          <view class="manage-name">{{item.title}}</view>
+          <view class="manage-status {{item.isHidden ? 'hidden' : ''}}">{{item.isHidden ? '已隐藏' : item.status}}</view>
+        </view>
+        <view class="manage-meta">{{item.owner}} · {{item.category}} · {{item.location}}</view>
+        <view class="manage-meta">租金 ¥{{item.price}}/天 · 押金 ¥{{item.deposit}}</view>
+        <view wx:if="{{item.isHidden && item.hiddenReason}}" class="manage-reason">隐藏原因：{{item.hiddenReason}}</view>
+        <button class="manage-btn" size="mini" data-id="{{item.id}}" bindtap="handleItemAction">管理此帖</button>
+      </view>
+    </block>
+
+    <block wx:if="{{!loading && activeTab === 'demand'}}">
+      <view wx:if="{{manageDemands.length === 0}}" class="card empty">暂无求借帖子</view>
+      <view wx:for="{{manageDemands}}" wx:key="id" class="card manage-item">
+        <view class="manage-head">
+          <view class="manage-name">{{item.title}}</view>
+          <view class="manage-status {{item.isHidden ? 'hidden' : ''}}">{{item.isHidden ? '已隐藏' : item.status}}</view>
+        </view>
+        <view class="manage-meta">{{item.publisher}} · {{item.category}} · {{item.location}}</view>
+        <view class="manage-meta">预算 ¥{{item.budget}} · 感谢方式：{{item.reward}}</view>
+        <view wx:if="{{item.isHidden && item.hiddenReason}}" class="manage-reason">隐藏原因：{{item.hiddenReason}}</view>
+        <button class="manage-btn" size="mini" data-id="{{item.id}}" bindtap="handleDemandAction">管理此帖</button>
+      </view>
+    </block>
+  </view>
+</scroll-view>
