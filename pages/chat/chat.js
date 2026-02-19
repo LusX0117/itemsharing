@@ -47,6 +47,8 @@ Page({
     sessionId: '',
     session: null,
     currentUser: null,
+    messageList: [],
+    timelineRecords: [],
     messageText: '',
     compareRows: [],
     lastMessageAnchor: '',
@@ -97,8 +99,31 @@ Page({
       ...message,
       sender: message.senderUserId === 'system' ? 'system' : 'user',
       mine: String(message.senderUserId) === String(currentUser.id || ''),
-      timeText: formatDateTime(message.time)
-    }));
+      timeText: formatDateTime(message.time),
+      dayText: new Date(message.time).toISOString().slice(0, 10)
+    })).sort((a, b) => Number(a.id) - Number(b.id));
+  },
+
+  buildTimelineRecords(messages) {
+    const records = [];
+    let lastDay = '';
+    (messages || []).forEach((msg) => {
+      const dayText = msg.dayText || '';
+      if (dayText && dayText !== lastDay) {
+        records.push({
+          kind: 'marker',
+          rowKey: `day-${dayText}`,
+          label: dayText
+        });
+        lastDay = dayText;
+      }
+      records.push({
+        kind: 'message',
+        rowKey: `msg-${msg.id}`,
+        ...msg
+      });
+    });
+    return records;
   },
 
   buildSessionView(session) {
@@ -124,19 +149,20 @@ Page({
   applySessionAndMessages(session, mappedMessages) {
     const beforePhotos = session.beforePhotos || [];
     const afterPhotos = session.afterPhotos || [];
-    const lastMessage = mappedMessages[mappedMessages.length - 1];
     const normalizedStatus = resolveStatusByMessages(session.status, mappedMessages);
+    const lastMessage = mappedMessages[mappedMessages.length - 1];
 
     const sessionWithView = this.buildSessionView({
       ...session,
       status: normalizedStatus,
       beforePhotos,
-      afterPhotos,
-      messages: mappedMessages
+      afterPhotos
     });
 
     this.setData({
       session: sessionWithView,
+      messageList: mappedMessages,
+      timelineRecords: this.buildTimelineRecords(mappedMessages),
       compareRows: buildCompareRows(beforePhotos, afterPhotos),
       lastMessageAnchor: lastMessage ? `msg-${lastMessage.id}` : '',
       loading: false
@@ -221,7 +247,7 @@ Page({
         text
       });
       this.setData({ messageText: '' });
-      await this.fetchLatestMessages();
+      await this.refreshAll();
     } catch (err) {
       wx.showToast({ title: '发送失败', icon: 'none' });
     }
