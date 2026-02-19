@@ -25,6 +25,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
+app.get('/', (_req, res) => {
+  res.send('API running');
+});
+
 const seedUsers = [
   { id: 'seed_lender_1', phone: '18800000001', nickname: '李同学', password: '123456', isAdmin: false },
   { id: 'seed_lender_2', phone: '18800000002', nickname: '王同学', password: '123456', isAdmin: false },
