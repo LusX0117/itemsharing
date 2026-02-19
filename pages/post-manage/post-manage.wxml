@@ -1,6 +1,6 @@
 <navigation-bar title="帖子管理" color="black" background="#f8fbff"></navigation-bar>
 
-<scroll-view class="scrollarea" scroll-y>
+<scroll-view class="scrollarea" scroll-y enhanced enable-flex show-scrollbar="false">
   <view class="page">
     <view class="card tip">
       <view class="tip-title">{{isAdmin ? '管理员模式' : '我的帖子'}}</view>

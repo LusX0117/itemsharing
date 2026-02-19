@@ -1,6 +1,6 @@
 <navigation-bar title="我的" back="{{false}}" color="black" background="#f8fbff"></navigation-bar>
 
-<scroll-view class="scrollarea" scroll-y>
+<scroll-view class="scrollarea" scroll-y enhanced enable-flex show-scrollbar="false">
   <view class="page">
     <view class="card profile">
       <view wx:if="{{currentUser}}" class="profile-row">

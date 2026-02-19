@@ -1,6 +1,6 @@
 <navigation-bar title="信息" back="{{false}}" color="black" background="#f8fbff"></navigation-bar>
 
-<scroll-view class="scrollarea" scroll-y>
+<scroll-view class="scrollarea" scroll-y enhanced enable-flex show-scrollbar="false">
   <view class="page">
     <view wx:if="{{!currentUser}}" class="card empty">
       <view>请先登录查看聊天信息</view>
