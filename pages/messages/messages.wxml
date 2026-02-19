@@ -12,7 +12,10 @@
     <view wx:for="{{sessions}}" wx:key="id" class="card session-card">
       <view class="session-header">
         <view class="session-title">{{item.itemTitle}}</view>
-        <view class="session-status">{{item.status}}</view>
+        <view class="session-head-right">
+          <view class="session-status">{{item.status}}</view>
+          <view wx:if="{{item.unreadCount > 0}}" class="session-unread">{{item.unreadText}}</view>
+        </view>
       </view>
       <view class="session-role">我的身份：{{item.myRole}}</view>
       <view class="session-meta">出借者：{{item.lenderName}}</view>

@@ -28,9 +28,12 @@ const getChatSessions = (userId) => request({
   url: `/api/chat/sessions?userId=${encodeURIComponent(String(userId))}`
 });
 
-const getChatSession = (sessionId) => request({
-  url: `/api/chat/session?sessionId=${encodeURIComponent(String(sessionId))}`
-});
+const getChatSession = (sessionId, userId) => {
+  const userSuffix = userId ? `&userId=${encodeURIComponent(String(userId))}` : '';
+  return request({
+    url: `/api/chat/session?sessionId=${encodeURIComponent(String(sessionId))}${userSuffix}`
+  });
+};
 
 const getChatMessages = (sessionId, afterId) => {
   const suffix = afterId ? `&afterId=${encodeURIComponent(String(afterId))}` : '';
@@ -63,6 +66,25 @@ const runChatSessionAction = (payload) => request({
   data: payload
 });
 
+const markChatSessionRead = (payload) => request({
+  url: '/api/chat/session/read',
+  method: 'POST',
+  data: payload
+});
+
+const getSessionRatings = (sessionId, userId) => {
+  const userSuffix = userId ? `&userId=${encodeURIComponent(String(userId))}` : '';
+  return request({
+    url: `/api/chat/session/ratings?sessionId=${encodeURIComponent(String(sessionId))}${userSuffix}`
+  });
+};
+
+const rateChatSession = (payload) => request({
+  url: '/api/chat/session/rate',
+  method: 'POST',
+  data: payload
+});
+
 module.exports = {
   CHAT_BASE_URL,
   startChatSession,
@@ -72,5 +94,8 @@ module.exports = {
   sendChatMessage,
   updateChatSessionPhotos,
   updateChatSessionStatus,
-  runChatSessionAction
+  runChatSessionAction,
+  markChatSessionRead,
+  getSessionRatings,
+  rateChatSession
 };

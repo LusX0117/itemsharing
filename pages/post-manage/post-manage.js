@@ -1,5 +1,11 @@
 const { getCurrentUser } = require('../../utils/db');
-const { getManagePosts, updateItemPost, updateDemandPost } = require('../../utils/post-api');
+const {
+  getManagePosts,
+  updateItemPost,
+  updateDemandPost,
+  deleteItemPost,
+  deleteDemandPost
+} = require('../../utils/post-api');
 
 const chooseAction = (itemList) => new Promise((resolve) => {
   wx.showActionSheet({
@@ -23,6 +29,16 @@ const inputText = ({ title, placeholder, value = '' }) => new Promise((resolve) 
       resolve(String(res.content || '').trim());
     },
     fail: () => resolve(null)
+  });
+});
+
+const confirmDelete = (content) => new Promise((resolve) => {
+  wx.showModal({
+    title: '确认删除',
+    content,
+    confirmColor: '#b91c1c',
+    success: (res) => resolve(Boolean(res.confirm)),
+    fail: () => resolve(false)
   });
 });
 
@@ -99,8 +115,8 @@ Page({
 
     const isHidden = Boolean(target.isHidden);
     const actionList = isHidden
-      ? ['恢复显示', '修改标题', '切换状态']
-      : ['暂时隐藏', '修改标题', '切换状态'];
+      ? ['恢复显示', '修改标题', '切换状态', '删除帖子']
+      : ['暂时隐藏', '修改标题', '切换状态', '删除帖子'];
     const idx = await chooseAction(actionList);
     if (idx < 0) return;
 
@@ -128,6 +144,12 @@ Page({
           actorUserId: String(currentUser.id),
           status: nextStatus
         });
+      } else if (idx === 3) {
+        const ok = await confirmDelete('删除后不可恢复，是否继续？');
+        if (!ok) return;
+        await deleteItemPost(itemId, {
+          actorUserId: String(currentUser.id)
+        });
       }
       wx.showToast({ title: '更新成功', icon: 'success' });
       await this.loadManagePosts();
@@ -151,8 +173,8 @@ Page({
 
     const isHidden = Boolean(target.isHidden);
     const actionList = isHidden
-      ? ['恢复显示', '修改标题', '切换状态']
-      : ['暂时隐藏', '修改标题', '切换状态'];
+      ? ['恢复显示', '修改标题', '切换状态', '删除帖子']
+      : ['暂时隐藏', '修改标题', '切换状态', '删除帖子'];
     const idx = await chooseAction(actionList);
     if (idx < 0) return;
 
@@ -179,6 +201,12 @@ Page({
         await updateDemandPost(demandId, {
           actorUserId: String(currentUser.id),
           status: nextStatus
+        });
+      } else if (idx === 3) {
+        const ok = await confirmDelete('删除后不可恢复，是否继续？');
+        if (!ok) return;
+        await deleteDemandPost(demandId, {
+          actorUserId: String(currentUser.id)
         });
       }
       wx.showToast({ title: '更新成功', icon: 'success' });

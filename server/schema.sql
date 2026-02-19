@@ -67,6 +67,25 @@ create table if not exists public.chat_messages (
   time bigint not null
 );
 
+create table if not exists public.session_ratings (
+  id bigserial primary key,
+  session_id text not null references public.chat_sessions(id) on delete cascade,
+  rater_user_id text not null,
+  target_user_id text not null,
+  score integer not null check (score >= 1 and score <= 5),
+  comment text not null default '',
+  created_at bigint not null,
+  unique (session_id, rater_user_id)
+);
+
+create table if not exists public.session_reads (
+  user_id text not null,
+  session_id text not null references public.chat_sessions(id) on delete cascade,
+  last_read_message_id bigint not null default 0,
+  updated_at bigint not null,
+  primary key (user_id, session_id)
+);
+
 create index if not exists idx_messages_session_time on public.chat_messages(session_id, time);
 create index if not exists idx_sessions_lender on public.chat_sessions(lender_user_id, updated_at);
 create index if not exists idx_sessions_borrower on public.chat_sessions(borrower_user_id, updated_at);
@@ -74,3 +93,6 @@ create index if not exists idx_item_posts_owner on public.item_posts(owner_user_
 create index if not exists idx_item_posts_hidden on public.item_posts(is_hidden, updated_at);
 create index if not exists idx_demand_posts_owner on public.demand_posts(publisher_user_id, updated_at);
 create index if not exists idx_demand_posts_hidden on public.demand_posts(is_hidden, updated_at);
+create index if not exists idx_ratings_session_target on public.session_ratings(session_id, target_user_id, created_at);
+create index if not exists idx_ratings_target on public.session_ratings(target_user_id, created_at);
+create index if not exists idx_session_reads_user_updated on public.session_reads(user_id, updated_at);

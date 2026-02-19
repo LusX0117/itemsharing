@@ -4,7 +4,7 @@
   <view class="page">
     <view class="card tip">
       <view class="tip-title">{{isAdmin ? '管理员模式' : '我的帖子'}}</view>
-      <view class="tip-desc">{{isAdmin ? '可管理全站帖子：修改、隐藏、恢复、状态切换' : '可管理你发布的帖子：修改、隐藏、恢复、状态切换'}}</view>
+      <view class="tip-desc">{{isAdmin ? '可管理全站帖子：修改、隐藏、恢复、状态切换、删除' : '可管理你发布的帖子：修改、隐藏、恢复、状态切换、删除'}}</view>
     </view>
 
     <view class="card tabs">

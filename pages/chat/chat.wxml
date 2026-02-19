@@ -6,9 +6,16 @@
   <view class="page">
     <view class="card">
       <view class="item-title">{{session.itemTitle}}</view>
+      <view class="item-meta">借用单号：{{session.orderNo}}</view>
       <view class="item-meta">出借者：{{session.lenderName}}</view>
       <view class="item-meta">借用者：{{session.borrowerName}}</view>
       <view class="item-meta">状态：{{session.status}}</view>
+      <view class="item-meta">流程阶段：{{session.orderStageText}}</view>
+      <view class="stage-list">
+        <view wx:for="{{session.stageSteps}}" wx:key="label" class="stage-chip {{item.done ? 'done' : ''}} {{item.current ? 'current' : ''}}">
+          {{item.label}}
+        </view>
+      </view>
       <view wx:if="{{session.pendingBorrowApproval}}" class="status-tip">当前等待出借者同意后才会进入借用中。</view>
       <view wx:if="{{session.status === '待确认归还'}}" class="status-tip">当前为归还确认阶段，需出借者确认后完成。</view>
       <view wx:if="{{session.canApproveBorrow || session.canRejectBorrow}}" class="action-row">
@@ -18,10 +25,23 @@
       <view wx:if="{{session.canRequestReturn}}" class="action-row">
         <button class="return-btn" size="mini" bindtap="requestReturn">发起归还确认</button>
       </view>
+      <view wx:if="{{session.canCancelBorrow}}" class="action-row">
+        <button class="cancel-btn" size="mini" bindtap="cancelBorrow">取消借用</button>
+      </view>
       <view wx:if="{{session.canConfirmReturn || session.canRejectReturn}}" class="action-row">
         <button class="agree-btn" size="mini" bindtap="confirmReturn">确认归还</button>
         <button class="reject-btn" size="mini" bindtap="rejectReturn">退回确认</button>
       </view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">互评</view>
+      <view class="rating-meta">对方：{{session.targetName}}</view>
+      <view class="rating-meta">对方信用：{{session.targetCreditText}}</view>
+      <view class="rating-meta">我的评价：{{session.myRatingText}}</view>
+      <view wx:if="{{session.myRating && session.myRating.comment}}" class="rating-comment">“{{session.myRating.comment}}”</view>
+      <button wx:if="{{session.canRate}}" class="rate-btn" size="mini" bindtap="submitRating">提交评价</button>
+      <view wx:if="{{!session.canRate && session.status !== '已完成'}}" class="rating-tip">借用完成后可评价</view>
     </view>
 
     <view class="card">
