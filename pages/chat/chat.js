@@ -56,15 +56,30 @@ Page({
   },
 
   pollTimer: null,
+  isPageAlive: false,
+  isPageVisible: false,
+
+  safeSetData(nextData, options = {}) {
+    const { allowHidden = false } = options;
+    if (!this.isPageAlive) {
+      return;
+    }
+    if (!allowHidden && !this.isPageVisible) {
+      return;
+    }
+    this.setData(nextData);
+  },
 
   onLoad(options) {
-    this.setData({
+    this.isPageAlive = true;
+    this.safeSetData({
       sessionId: options.sessionId || ''
-    });
+    }, { allowHidden: true });
   },
 
   async onShow() {
-    this.setData({
+    this.isPageVisible = true;
+    this.safeSetData({
       currentUser: getCurrentUser()
     });
     await this.refreshAll();
@@ -72,16 +87,22 @@ Page({
   },
 
   onHide() {
+    this.isPageVisible = false;
     this.stopPolling();
   },
 
   onUnload() {
+    this.isPageVisible = false;
+    this.isPageAlive = false;
     this.stopPolling();
   },
 
   startPolling() {
     this.stopPolling();
     this.pollTimer = setInterval(() => {
+      if (!this.isPageAlive || !this.isPageVisible) {
+        return;
+      }
       this.fetchLatestMessages();
     }, POLL_INTERVAL_MS);
   },
@@ -159,7 +180,7 @@ Page({
       afterPhotos
     });
 
-    this.setData({
+    this.safeSetData({
       session: sessionWithView,
       messageList: mappedMessages,
       timelineRecords: this.buildTimelineRecords(mappedMessages),
@@ -172,7 +193,7 @@ Page({
   async refreshAll() {
     const { sessionId } = this.data;
     if (!sessionId) {
-      this.setData({ loading: false });
+      this.safeSetData({ loading: false });
       return;
     }
 
@@ -184,15 +205,17 @@ Page({
 
       const session = sessionResp.session;
       if (!session) {
-        this.setData({ session: null, loading: false });
+        this.safeSetData({ session: null, loading: false });
         return;
       }
 
       const mappedMessages = this.mapMessages(messageResp.messages || []);
       this.applySessionAndMessages(session, mappedMessages);
     } catch (err) {
-      this.setData({ loading: false });
-      wx.showToast({ title: '聊天数据加载失败', icon: 'none' });
+      this.safeSetData({ loading: false });
+      if (this.isPageVisible) {
+        wx.showToast({ title: '聊天数据加载失败', icon: 'none' });
+      }
     }
   },
 
@@ -221,7 +244,7 @@ Page({
   },
 
   handleMessageInput(event) {
-    this.setData({
+    this.safeSetData({
       messageText: event.detail.value
     });
   },
@@ -246,10 +269,12 @@ Page({
         senderName: currentUser.nickname,
         text
       });
-      this.setData({ messageText: '' });
+      this.safeSetData({ messageText: '' });
       await this.refreshAll();
     } catch (err) {
-      wx.showToast({ title: '发送失败', icon: 'none' });
+      if (this.isPageVisible) {
+        wx.showToast({ title: '发送失败', icon: 'none' });
+      }
     }
   },
 
@@ -262,7 +287,9 @@ Page({
 
     if (needComparePhotos) {
       if (!(session.beforePhotos || []).length || !(session.afterPhotos || []).length) {
-        wx.showToast({ title: '请先补充借前和归还后照片', icon: 'none' });
+        if (this.isPageVisible) {
+          wx.showToast({ title: '请先补充借前和归还后照片', icon: 'none' });
+        }
         return;
       }
     }
@@ -274,19 +301,27 @@ Page({
         action
       });
       await this.refreshAll();
-      wx.showToast({ title: successText, icon: 'success' });
+      if (this.isPageVisible) {
+        wx.showToast({ title: successText, icon: 'success' });
+      }
     } catch (err) {
       const msg = String((err && err.message) || '');
       if (msg.includes('invalid_status_transition')) {
-        wx.showToast({ title: '状态已变化，请刷新后重试', icon: 'none' });
+        if (this.isPageVisible) {
+          wx.showToast({ title: '状态已变化，请刷新后重试', icon: 'none' });
+        }
         await this.refreshAll();
         return;
       }
       if (msg.includes('missing_compare_photos')) {
-        wx.showToast({ title: '请先上传借前和归还后照片', icon: 'none' });
+        if (this.isPageVisible) {
+          wx.showToast({ title: '请先上传借前和归还后照片', icon: 'none' });
+        }
         return;
       }
-      wx.showToast({ title: '操作失败', icon: 'none' });
+      if (this.isPageVisible) {
+        wx.showToast({ title: '操作失败', icon: 'none' });
+      }
     }
   },
 
@@ -357,7 +392,9 @@ Page({
 
     const currentList = session[fieldName] || [];
     if (currentList.length >= MAX_PHOTO_COUNT) {
-      wx.showToast({ title: '最多上传3张', icon: 'none' });
+      if (this.isPageVisible) {
+        wx.showToast({ title: '最多上传3张', icon: 'none' });
+      }
       return;
     }
 
@@ -381,7 +418,9 @@ Page({
           await updateChatSessionPhotos(payload);
           await this.refreshAll();
         } catch (err) {
-          wx.showToast({ title: '照片保存失败', icon: 'none' });
+          if (this.isPageVisible) {
+            wx.showToast({ title: '照片保存失败', icon: 'none' });
+          }
         }
       }
     });
