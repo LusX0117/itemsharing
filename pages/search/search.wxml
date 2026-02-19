@@ -1,6 +1,6 @@
 <navigation-bar title="搜索" back="{{false}}" color="black" background="#f8fbff"></navigation-bar>
 
-<scroll-view class="scrollarea" scroll-y>
+<scroll-view class="scrollarea" scroll-y enhanced enable-flex show-scrollbar="false">
   <view class="page">
     <view class="card auth-bar">
       <view class="auth-text" wx:if="{{currentUser}}">当前账号：{{currentUser.nickname}}</view>

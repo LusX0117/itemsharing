@@ -1,38 +1,40 @@
 <navigation-bar title="账号中心" color="black" background="#f8fbff"></navigation-bar>
 
-<view class="page">
-  <view class="card switcher">
-    <view class="tab {{mode === 'login' ? 'active' : ''}}" data-mode="login" bindtap="switchMode">登录</view>
-    <view class="tab {{mode === 'register' ? 'active' : ''}}" data-mode="register" bindtap="switchMode">注册</view>
-  </view>
+<scroll-view class="scrollarea" scroll-y enhanced enable-flex show-scrollbar="false">
+  <view class="page">
+    <view class="card switcher">
+      <view class="tab {{mode === 'login' ? 'active' : ''}}" data-mode="login" bindtap="switchMode">登录</view>
+      <view class="tab {{mode === 'register' ? 'active' : ''}}" data-mode="register" bindtap="switchMode">注册</view>
+    </view>
 
-  <view class="card form">
-    <input
-      class="form-input"
-      placeholder="手机号（11位）"
-      type="number"
-      maxlength="11"
-      value="{{form.phone}}"
-      data-field="phone"
-      bindinput="handleInput"
-    />
-    <input
-      class="form-input"
-      placeholder="密码（至少6位）"
-      password
-      value="{{form.password}}"
-      data-field="password"
-      bindinput="handleInput"
-    />
-    <input
-      wx:if="{{mode === 'register'}}"
-      class="form-input"
-      placeholder="昵称"
-      value="{{form.nickname}}"
-      data-field="nickname"
-      bindinput="handleInput"
-    />
+    <view class="card form">
+      <input
+        class="form-input"
+        placeholder="手机号（11位）"
+        type="number"
+        maxlength="11"
+        value="{{form.phone}}"
+        data-field="phone"
+        bindinput="handleInput"
+      />
+      <input
+        class="form-input"
+        placeholder="密码（至少6位）"
+        password
+        value="{{form.password}}"
+        data-field="password"
+        bindinput="handleInput"
+      />
+      <input
+        wx:if="{{mode === 'register'}}"
+        class="form-input"
+        placeholder="昵称"
+        value="{{form.nickname}}"
+        data-field="nickname"
+        bindinput="handleInput"
+      />
 
-    <button class="submit-btn" type="primary" bindtap="submit">{{mode === 'login' ? '立即登录' : '注册并登录'}}</button>
+      <button class="submit-btn" type="primary" bindtap="submit">{{mode === 'login' ? '立即登录' : '注册并登录'}}</button>
+    </view>
   </view>
-</view>
+</scroll-view>

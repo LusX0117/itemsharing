@@ -1,13 +1,22 @@
 page {
-  min-height: 100vh;
+  height: 100vh;
   background:
     radial-gradient(circle at top left, #eaf7f4 0%, rgba(234, 247, 244, 0) 40%),
     linear-gradient(180deg, #f9fbf8 0%, #f4f7f3 100%);
   color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.scrollarea {
+  flex: 1;
+  min-height: 0;
 }
 
 .page {
-  padding: 24rpx;
+  padding: 24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
 .card {
@@ -51,8 +60,8 @@ page {
 }
 
 .chat-list {
-  max-height: 420rpx;
-  min-height: 220rpx;
+  height: 520rpx;
+  padding-bottom: 4rpx;
   padding-right: 4rpx;
 }
 
@@ -65,6 +74,13 @@ page {
 .timeline-item {
   position: relative;
   margin-bottom: 16rpx;
+}
+
+.timeline-marker {
+  font-size: 20rpx;
+  color: #64748b;
+  text-align: center;
+  margin: 8rpx 0 14rpx;
 }
 
 .timeline-dot {
@@ -217,12 +233,6 @@ page {
 .empty {
   color: var(--muted);
   font-size: 23rpx;
-}
-
-.finish-btn {
-  background: #b45309 !important;
-  color: #ffffff !important;
-  margin-top: 8rpx;
 }
 
 .missing-page {
