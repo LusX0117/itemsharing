@@ -1,62 +1,37 @@
 const { getCurrentUser, clearCurrentUser } = require('../../utils/db');
 const { getChatSessions } = require('../../utils/chat-api');
-const { getHomePosts, getManagePosts, updateItemPost, updateDemandPost } = require('../../utils/post-api');
-
-const chooseAction = (itemList) => new Promise((resolve) => {
-  wx.showActionSheet({
-    itemList,
-    success: (res) => resolve(res.tapIndex),
-    fail: () => resolve(-1)
-  });
-});
-
-const inputText = ({ title, placeholder, value = '' }) => new Promise((resolve) => {
-  wx.showModal({
-    title,
-    editable: true,
-    placeholderText: placeholder,
-    content: value,
-    success: (res) => {
-      if (!res.confirm) {
-        resolve(null);
-        return;
-      }
-      resolve(String(res.content || '').trim());
-    },
-    fail: () => resolve(null)
-  });
-});
+const { getHomePosts, getManagePosts } = require('../../utils/post-api');
 
 Page({
   data: {
     currentUser: null,
     isAdmin: false,
+    avatarText: '我',
     stats: {
       itemCount: 0,
-      sessionCount: 0
-    },
-    manageItems: [],
-    manageDemands: [],
-    loadingManage: false
+      sessionCount: 0,
+      myPostCount: 0
+    }
   },
 
   async onShow() {
     this.refreshCurrentUser();
-    await this.loadAllData();
+    await this.loadDashboard();
   },
 
   refreshCurrentUser() {
     const currentUser = getCurrentUser();
     this.setData({
       currentUser,
-      isAdmin: Boolean(currentUser && currentUser.isAdmin)
+      isAdmin: Boolean(currentUser && currentUser.isAdmin),
+      avatarText: currentUser && currentUser.nickname ? currentUser.nickname.slice(0, 1) : '我'
     });
   },
 
-  async loadAllData() {
+  async loadDashboard() {
     await Promise.all([
       this.loadStats(),
-      this.loadManagePosts()
+      this.loadMyPostCount()
     ]);
   },
 
@@ -82,40 +57,31 @@ Page({
     }
 
     this.setData({
-      stats: {
-        itemCount,
-        sessionCount
-      }
+      'stats.itemCount': itemCount,
+      'stats.sessionCount': sessionCount
     });
   },
 
-  async loadManagePosts() {
+  async loadMyPostCount() {
     const currentUser = getCurrentUser();
     if (!currentUser) {
       this.setData({
-        manageItems: [],
-        manageDemands: [],
-        loadingManage: false
+        'stats.myPostCount': 0
       });
       return;
     }
 
-    this.setData({ loadingManage: true });
     try {
       const resp = await getManagePosts(String(currentUser.id));
+      const myPostCount = (resp.items || []).length + (resp.demands || []).length;
       this.setData({
         isAdmin: Boolean(resp.isAdmin || currentUser.isAdmin),
-        manageItems: resp.items || [],
-        manageDemands: resp.demands || []
+        'stats.myPostCount': myPostCount
       });
     } catch (err) {
-      wx.showToast({ title: '管理列表加载失败', icon: 'none' });
       this.setData({
-        manageItems: [],
-        manageDemands: []
+        'stats.myPostCount': 0
       });
-    } finally {
-      this.setData({ loadingManage: false });
     }
   },
 
@@ -125,124 +91,34 @@ Page({
     });
   },
 
-  logout() {
-    clearCurrentUser();
-    this.setData({
-      currentUser: null,
-      isAdmin: false,
-      manageItems: [],
-      manageDemands: []
-    });
-    wx.showToast({ title: '已退出登录', icon: 'none' });
-  },
-
   goMessages() {
     wx.switchTab({
       url: '/pages/messages/messages'
     });
   },
 
-  async handleItemAction(event) {
-    const currentUser = this.data.currentUser;
-    if (!currentUser) {
+  goPostManage() {
+    if (!this.data.currentUser) {
+      wx.showToast({ title: '请先登录', icon: 'none' });
       return;
     }
-
-    const itemId = Number(event.currentTarget.dataset.id);
-    const target = this.data.manageItems.find((item) => item.id === itemId);
-    if (!target) {
-      wx.showToast({ title: '帖子不存在', icon: 'none' });
-      return;
-    }
-
-    const isHidden = Boolean(target.isHidden);
-    const actionList = isHidden
-      ? ['恢复显示', '修改标题', '切换状态']
-      : ['暂时隐藏', '修改标题', '切换状态'];
-    const idx = await chooseAction(actionList);
-    if (idx < 0) return;
-
-    try {
-      if (idx === 0) {
-        await updateItemPost(itemId, {
-          actorUserId: String(currentUser.id),
-          isHidden: !isHidden,
-          hiddenReason: isHidden ? '' : (this.data.isAdmin ? '管理员暂时隐藏' : '用户暂时隐藏')
-        });
-      } else if (idx === 1) {
-        const nextTitle = await inputText({
-          title: '修改出借标题',
-          placeholder: '请输入新标题',
-          value: target.title
-        });
-        if (!nextTitle) return;
-        await updateItemPost(itemId, {
-          actorUserId: String(currentUser.id),
-          title: nextTitle
-        });
-      } else if (idx === 2) {
-        const nextStatus = target.status === '可借' ? '暂停' : '可借';
-        await updateItemPost(itemId, {
-          actorUserId: String(currentUser.id),
-          status: nextStatus
-        });
-      }
-      wx.showToast({ title: '更新成功', icon: 'success' });
-      await this.loadAllData();
-    } catch (err) {
-      wx.showToast({ title: '更新失败', icon: 'none' });
-    }
+    wx.navigateTo({
+      url: '/pages/post-manage/post-manage'
+    });
   },
 
-  async handleDemandAction(event) {
-    const currentUser = this.data.currentUser;
-    if (!currentUser) {
-      return;
-    }
-
-    const demandId = String(event.currentTarget.dataset.id || '');
-    const target = this.data.manageDemands.find((item) => String(item.id) === demandId);
-    if (!target) {
-      wx.showToast({ title: '帖子不存在', icon: 'none' });
-      return;
-    }
-
-    const isHidden = Boolean(target.isHidden);
-    const actionList = isHidden
-      ? ['恢复显示', '修改标题', '切换状态']
-      : ['暂时隐藏', '修改标题', '切换状态'];
-    const idx = await chooseAction(actionList);
-    if (idx < 0) return;
-
-    try {
-      if (idx === 0) {
-        await updateDemandPost(demandId, {
-          actorUserId: String(currentUser.id),
-          isHidden: !isHidden,
-          hiddenReason: isHidden ? '' : (this.data.isAdmin ? '管理员暂时隐藏' : '用户暂时隐藏')
-        });
-      } else if (idx === 1) {
-        const nextTitle = await inputText({
-          title: '修改求借标题',
-          placeholder: '请输入新标题',
-          value: target.title
-        });
-        if (!nextTitle) return;
-        await updateDemandPost(demandId, {
-          actorUserId: String(currentUser.id),
-          title: nextTitle
-        });
-      } else if (idx === 2) {
-        const nextStatus = target.status === '求借中' ? '已解决' : '求借中';
-        await updateDemandPost(demandId, {
-          actorUserId: String(currentUser.id),
-          status: nextStatus
-        });
+  logout() {
+    clearCurrentUser();
+    this.setData({
+      currentUser: null,
+      isAdmin: false,
+      avatarText: '我',
+      stats: {
+        itemCount: this.data.stats.itemCount,
+        sessionCount: 0,
+        myPostCount: 0
       }
-      wx.showToast({ title: '更新成功', icon: 'success' });
-      await this.loadAllData();
-    } catch (err) {
-      wx.showToast({ title: '更新失败', icon: 'none' });
-    }
+    });
+    wx.showToast({ title: '已退出登录', icon: 'none' });
   }
 });
