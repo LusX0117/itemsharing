@@ -5,6 +5,7 @@
     "pages/publish/publish",
     "pages/messages/messages",
     "pages/me/me",
+    "pages/post-manage/post-manage",
     "pages/auth/auth",
     "pages/chat/chat"
   ],
