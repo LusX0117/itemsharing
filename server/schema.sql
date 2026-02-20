@@ -96,3 +96,11 @@ create index if not exists idx_demand_posts_hidden on public.demand_posts(is_hid
 create index if not exists idx_ratings_session_target on public.session_ratings(session_id, target_user_id, created_at);
 create index if not exists idx_ratings_target on public.session_ratings(target_user_id, created_at);
 create index if not exists idx_session_reads_user_updated on public.session_reads(user_id, updated_at);
+
+alter table public.users enable row level security;
+alter table public.item_posts enable row level security;
+alter table public.demand_posts enable row level security;
+alter table public.chat_sessions enable row level security;
+alter table public.chat_messages enable row level security;
+alter table public.session_ratings enable row level security;
+alter table public.session_reads enable row level security;
