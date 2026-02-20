@@ -142,6 +142,8 @@ const genId = (prefix) => `${prefix}_${Date.now()}_${Math.floor(Math.random() * 
 const AUTH_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const AUTH_RATE_LIMIT_MAX_PER_IP = Number(process.env.AUTH_RATE_LIMIT_MAX_PER_IP || 80);
 const AUTH_RATE_LIMIT_MAX_PER_PHONE = Number(process.env.AUTH_RATE_LIMIT_MAX_PER_PHONE || 30);
+const AUTH_TOKEN_SECRET = String(process.env.AUTH_TOKEN_SECRET || 'dev-only-change-me');
+const AUTH_TOKEN_EXPIRE_MS = Number(process.env.AUTH_TOKEN_EXPIRE_MS || 7 * 24 * 60 * 60 * 1000);
 const authRateBuckets = new Map();
 
 const normalizePhone = (phone) => {
@@ -202,6 +204,50 @@ const checkAuthThrottle = (req, phone) => {
   }
   const phoneKey = `auth_phone:${String(phone)}`;
   return consumeRateBucket(phoneKey, AUTH_RATE_LIMIT_MAX_PER_PHONE, AUTH_RATE_LIMIT_WINDOW_MS);
+};
+
+const toBase64Url = (input) => Buffer.from(String(input)).toString('base64url');
+const fromBase64Url = (input) => Buffer.from(String(input), 'base64url').toString('utf8');
+
+const signAuthToken = (userId) => {
+  const payload = {
+    uid: String(userId),
+    exp: Date.now() + AUTH_TOKEN_EXPIRE_MS
+  };
+  const body = toBase64Url(JSON.stringify(payload));
+  const signature = crypto.createHmac('sha256', AUTH_TOKEN_SECRET).update(body).digest('base64url');
+  return `${body}.${signature}`;
+};
+
+const verifyAuthToken = (token) => {
+  const text = String(token || '').trim();
+  const [body, signature] = text.split('.');
+  if (!body || !signature) {
+    return null;
+  }
+  const expected = crypto.createHmac('sha256', AUTH_TOKEN_SECRET).update(body).digest('base64url');
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return null;
+  }
+  try {
+    const payload = JSON.parse(fromBase64Url(body));
+    if (!payload || !payload.uid || !payload.exp || Number(payload.exp) <= Date.now()) {
+      return null;
+    }
+    return String(payload.uid);
+  } catch (err) {
+    return null;
+  }
+};
+
+const readBearerToken = (req) => {
+  const authHeader = String((req.headers && req.headers.authorization) || '').trim();
+  if (!authHeader.toLowerCase().startsWith('bearer ')) {
+    return '';
+  }
+  return authHeader.slice(7).trim();
 };
 
 const buildPasswordHash = (password) => {
@@ -394,9 +440,47 @@ const loadUserById = async (userId) => {
   if (!id) {
     return null;
   }
-  const resp = await supabase.from('users').select('id, is_admin').eq('id', id).maybeSingle();
+  const resp = await supabase.from('users').select('id, phone, nickname, is_admin').eq('id', id).maybeSingle();
   throwIfError(resp.error, 'user_query_failed');
   return resp.data || null;
+};
+
+const loadUsersByIds = async (userIds = []) => {
+  const ids = (Array.isArray(userIds) ? userIds : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+  if (!ids.length) {
+    return {};
+  }
+  const resp = await supabase
+    .from('users')
+    .select('id, phone, nickname, is_admin')
+    .in('id', ids);
+  throwIfError(resp.error, 'users_query_failed');
+  const map = {};
+  (resp.data || []).forEach((item) => {
+    map[String(item.id)] = item;
+  });
+  return map;
+};
+
+const requireAuthUser = async (req, res) => {
+  const token = readBearerToken(req);
+  if (!token) {
+    res.status(401).json({ error: 'missing_auth_token' });
+    return null;
+  }
+  const userId = verifyAuthToken(token);
+  if (!userId) {
+    res.status(401).json({ error: 'invalid_auth_token' });
+    return null;
+  }
+  const user = await loadUserById(userId);
+  if (!user) {
+    res.status(401).json({ error: 'invalid_auth_token' });
+    return null;
+  }
+  return user;
 };
 
 const ensureCanManageItem = async (actorUserId, itemRow) => {
@@ -440,17 +524,18 @@ const syncSeedUsers = async () => {
       .maybeSingle();
     throwIfError(byPhoneResp.error, 'seed_users_lookup_failed');
 
-    // If admin phone already belongs to an existing account, promote that account.
-    if (byPhoneResp.data && String(byPhoneResp.data.id) !== String(user.id) && user.isAdmin) {
-      const promotedResp = await supabase
-        .from('users')
-        .update({
-          nickname: user.nickname,
-          password_hash: buildPasswordHash(user.password),
-          is_admin: true
-        })
-        .eq('id', String(byPhoneResp.data.id));
-      throwIfError(promotedResp.error, 'seed_admin_promote_failed');
+    if (byPhoneResp.data && String(byPhoneResp.data.id) !== String(user.id)) {
+      if (user.isAdmin) {
+        const promotedResp = await supabase
+          .from('users')
+          .update({
+            nickname: user.nickname,
+            password_hash: buildPasswordHash(user.password),
+            is_admin: true
+          })
+          .eq('id', String(byPhoneResp.data.id));
+        throwIfError(promotedResp.error, 'seed_admin_promote_failed');
+      }
       continue;
     }
 
@@ -488,20 +573,24 @@ const syncSeedPosts = async () => {
     throwIfError(insertedItems.error, 'seed_items_failed');
   }
 
-  const now = Date.now();
-  for (let i = 0; i < seedDemandPosts.length; i += 1) {
-    const demand = seedDemandPosts[i];
-    const demandPayload = {
-      ...demand,
-      created_at: now - i * 1000,
-      updated_at: now - i * 1000,
-      is_hidden: false,
-      hidden_reason: ''
-    };
-    const resp = await supabase.from('demand_posts').upsert(demandPayload, {
-      onConflict: 'id'
-    });
-    throwIfError(resp.error, 'seed_demands_failed');
+  const demandCountResp = await supabase.from('demand_posts').select('id', { count: 'exact', head: true });
+  throwIfError(demandCountResp.error, 'seed_demand_count_failed');
+  const demandCount = toNumber(demandCountResp.count);
+
+  if (!demandCount) {
+    const now = Date.now();
+    for (let i = 0; i < seedDemandPosts.length; i += 1) {
+      const demand = seedDemandPosts[i];
+      const demandPayload = {
+        ...demand,
+        created_at: now - i * 1000,
+        updated_at: now - i * 1000,
+        is_hidden: false,
+        hidden_reason: ''
+      };
+      const resp = await supabase.from('demand_posts').insert(demandPayload);
+      throwIfError(resp.error, 'seed_demands_failed');
+    }
   }
 };
 
@@ -542,9 +631,11 @@ app.post('/api/auth/register', asyncHandler(async (req, res) => {
   };
   const inserted = await supabase.from('users').insert(payload).select('id, phone, nickname, is_admin').single();
   throwIfError(inserted.error, 'register_insert_failed');
+  const token = signAuthToken(inserted.data.id);
 
   res.json({
-    user: mapUser(inserted.data)
+    user: mapUser(inserted.data),
+    token
   });
 }));
 
@@ -574,9 +665,11 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
     return;
   }
   clearRateBucket(`auth_phone:${phone}`);
+  const token = signAuthToken(result.data.id);
 
   res.json({
-    user: mapUser(result.data)
+    user: mapUser(result.data),
+    token
   });
 }));
 
@@ -602,22 +695,16 @@ app.get('/api/posts/home', asyncHandler(async (_req, res) => {
 }));
 
 app.get('/api/posts/manage', asyncHandler(async (req, res) => {
-  const userId = String((req.query && req.query.userId) || '').trim();
-  if (!userId) {
-    res.status(400).json({ error: 'missing_user_id' });
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
     return;
   }
-
-  const actor = await loadUserById(userId);
-  if (!actor) {
-    res.status(404).json({ error: 'user_not_found' });
-    return;
-  }
+  const userId = String(authUser.id);
 
   let itemQuery = supabase.from('item_posts').select('*').order('updated_at', { ascending: false });
   let demandQuery = supabase.from('demand_posts').select('*').order('updated_at', { ascending: false });
 
-  if (!actor.is_admin) {
+  if (!authUser.is_admin) {
     itemQuery = itemQuery.eq('owner_user_id', userId);
     demandQuery = demandQuery.eq('publisher_user_id', userId);
   }
@@ -627,17 +714,19 @@ app.get('/api/posts/manage', asyncHandler(async (req, res) => {
   throwIfError(demandResp.error, 'manage_demand_query_failed');
 
   res.json({
-    isAdmin: Boolean(actor.is_admin),
+    isAdmin: Boolean(authUser.is_admin),
     items: (itemResp.data || []).map(mapItemPost),
     demands: (demandResp.data || []).map(mapDemandPost)
   });
 }));
 
 app.post('/api/posts/item', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
   const {
     title,
-    ownerUserId,
-    ownerName,
     category,
     price,
     deposit,
@@ -645,22 +734,16 @@ app.post('/api/posts/item', asyncHandler(async (req, res) => {
     description
   } = req.body || {};
 
-  if (!title || !ownerUserId || !ownerName || !category || location === undefined) {
+  if (!title || !category || location === undefined) {
     res.status(400).json({ error: 'missing_required_fields' });
-    return;
-  }
-
-  const owner = await loadUserById(ownerUserId);
-  if (!owner) {
-    res.status(404).json({ error: 'owner_not_found' });
     return;
   }
 
   const now = Date.now();
   const payload = {
     title: String(title).trim(),
-    owner_user_id: String(ownerUserId),
-    owner_name: String(ownerName),
+    owner_user_id: String(authUser.id),
+    owner_name: `我 · ${authUser.nickname}`,
     category: String(category),
     price: toNumber(price),
     deposit: toNumber(deposit),
@@ -680,10 +763,12 @@ app.post('/api/posts/item', asyncHandler(async (req, res) => {
 }));
 
 app.post('/api/posts/demand', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
   const {
     title,
-    publisherUserId,
-    publisherName,
     category,
     budget,
     location,
@@ -691,14 +776,8 @@ app.post('/api/posts/demand', asyncHandler(async (req, res) => {
     description
   } = req.body || {};
 
-  if (!title || !publisherUserId || !publisherName || !category || location === undefined) {
+  if (!title || !category || location === undefined) {
     res.status(400).json({ error: 'missing_required_fields' });
-    return;
-  }
-
-  const publisher = await loadUserById(publisherUserId);
-  if (!publisher) {
-    res.status(404).json({ error: 'publisher_not_found' });
     return;
   }
 
@@ -706,8 +785,8 @@ app.post('/api/posts/demand', asyncHandler(async (req, res) => {
   const payload = {
     id: genId('d'),
     title: String(title).trim(),
-    publisher_user_id: String(publisherUserId),
-    publisher_name: String(publisherName),
+    publisher_user_id: String(authUser.id),
+    publisher_name: `我 · ${authUser.nickname}`,
     category: String(category),
     budget: toNumber(budget),
     location: String(location).trim(),
@@ -727,10 +806,14 @@ app.post('/api/posts/demand', asyncHandler(async (req, res) => {
 }));
 
 app.patch('/api/posts/item/:id', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
   const id = toNumber(req.params && req.params.id);
-  const { actorUserId, title, category, price, deposit, location, description, status, isHidden, hiddenReason } = req.body || {};
+  const { title, category, price, deposit, location, description, status, isHidden, hiddenReason } = req.body || {};
 
-  if (!id || !actorUserId) {
+  if (!id) {
     res.status(400).json({ error: 'missing_required_fields' });
     return;
   }
@@ -742,7 +825,7 @@ app.patch('/api/posts/item/:id', asyncHandler(async (req, res) => {
     return;
   }
 
-  await ensureCanManageItem(actorUserId, itemResp.data);
+  await ensureCanManageItem(authUser.id, itemResp.data);
 
   const patch = { updated_at: Date.now() };
   if (title !== undefined) patch.title = String(title).trim();
@@ -765,10 +848,14 @@ app.patch('/api/posts/item/:id', asyncHandler(async (req, res) => {
 }));
 
 app.patch('/api/posts/demand/:id', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
   const id = String((req.params && req.params.id) || '').trim();
-  const { actorUserId, title, category, budget, location, reward, description, status, isHidden, hiddenReason } = req.body || {};
+  const { title, category, budget, location, reward, description, status, isHidden, hiddenReason } = req.body || {};
 
-  if (!id || !actorUserId) {
+  if (!id) {
     res.status(400).json({ error: 'missing_required_fields' });
     return;
   }
@@ -780,7 +867,7 @@ app.patch('/api/posts/demand/:id', asyncHandler(async (req, res) => {
     return;
   }
 
-  await ensureCanManageDemand(actorUserId, demandResp.data);
+  await ensureCanManageDemand(authUser.id, demandResp.data);
 
   const patch = { updated_at: Date.now() };
   if (title !== undefined) patch.title = String(title).trim();
@@ -803,9 +890,12 @@ app.patch('/api/posts/demand/:id', asyncHandler(async (req, res) => {
 }));
 
 app.delete('/api/posts/item/:id', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
   const id = toNumber(req.params && req.params.id);
-  const actorUserId = String(((req.body && req.body.actorUserId) || (req.query && req.query.actorUserId) || '')).trim();
-  if (!id || !actorUserId) {
+  if (!id) {
     res.status(400).json({ error: 'missing_required_fields' });
     return;
   }
@@ -817,7 +907,7 @@ app.delete('/api/posts/item/:id', asyncHandler(async (req, res) => {
     return;
   }
 
-  await ensureCanManageItem(actorUserId, itemResp.data);
+  await ensureCanManageItem(authUser.id, itemResp.data);
 
   const deletedResp = await supabase.from('item_posts').delete().eq('id', id);
   throwIfError(deletedResp.error, 'item_delete_failed');
@@ -825,9 +915,12 @@ app.delete('/api/posts/item/:id', asyncHandler(async (req, res) => {
 }));
 
 app.delete('/api/posts/demand/:id', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
   const id = String((req.params && req.params.id) || '').trim();
-  const actorUserId = String(((req.body && req.body.actorUserId) || (req.query && req.query.actorUserId) || '')).trim();
-  if (!id || !actorUserId) {
+  if (!id) {
     res.status(400).json({ error: 'missing_required_fields' });
     return;
   }
@@ -839,7 +932,7 @@ app.delete('/api/posts/demand/:id', asyncHandler(async (req, res) => {
     return;
   }
 
-  await ensureCanManageDemand(actorUserId, demandResp.data);
+  await ensureCanManageDemand(authUser.id, demandResp.data);
 
   const deletedResp = await supabase.from('demand_posts').delete().eq('id', id);
   throwIfError(deletedResp.error, 'demand_delete_failed');
@@ -847,17 +940,32 @@ app.delete('/api/posts/demand/:id', asyncHandler(async (req, res) => {
 }));
 
 app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
   const {
     itemId,
     itemTitle,
     lenderUserId,
-    lenderName,
     borrowerUserId,
-    borrowerName
   } = req.body || {};
 
-  if (!itemId || !itemTitle || !lenderUserId || !lenderName || !borrowerUserId || !borrowerName) {
+  if (!itemId || !itemTitle || !lenderUserId || !borrowerUserId) {
     res.status(400).json({ error: 'missing_required_fields' });
+    return;
+  }
+  const lenderId = String(lenderUserId);
+  const borrowerId = String(borrowerUserId);
+  const authUserId = String(authUser.id);
+  if (authUserId !== lenderId && authUserId !== borrowerId) {
+    res.status(403).json({ error: 'forbidden_actor' });
+    return;
+  }
+
+  const users = await loadUsersByIds([lenderId, borrowerId]);
+  if (!users[lenderId] || !users[borrowerId]) {
+    res.status(404).json({ error: 'user_not_found' });
     return;
   }
 
@@ -865,8 +973,8 @@ app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
     .from('chat_sessions')
     .select('*')
     .eq('item_id', toNumber(itemId))
-    .eq('lender_user_id', String(lenderUserId))
-    .eq('borrower_user_id', String(borrowerUserId))
+    .eq('lender_user_id', lenderId)
+    .eq('borrower_user_id', borrowerId)
     .neq('status', '已完成')
     .neq('status', '已拒绝')
     .neq('status', '已取消')
@@ -884,10 +992,10 @@ app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
     id: genId('session'),
     item_id: toNumber(itemId),
     item_title: String(itemTitle),
-    lender_user_id: String(lenderUserId),
-    lender_name: String(lenderName),
-    borrower_user_id: String(borrowerUserId),
-    borrower_name: String(borrowerName),
+    lender_user_id: lenderId,
+    lender_name: String(users[lenderId].nickname || ''),
+    borrower_user_id: borrowerId,
+    borrower_name: String(users[borrowerId].nickname || ''),
     status: '待出借者同意',
     before_photos: [],
     after_photos: [],
@@ -911,11 +1019,11 @@ app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
 }));
 
 app.get('/api/chat/sessions', asyncHandler(async (req, res) => {
-  const { userId } = req.query || {};
-  if (!userId) {
-    res.status(400).json({ error: 'missing_user_id' });
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
     return;
   }
+  const userId = String(authUser.id);
 
   const rows = await supabase
     .from('chat_sessions')
@@ -939,7 +1047,11 @@ app.get('/api/chat/sessions', asyncHandler(async (req, res) => {
 }));
 
 app.get('/api/chat/session', asyncHandler(async (req, res) => {
-  const { sessionId, userId } = req.query || {};
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
+  const { sessionId } = req.query || {};
   if (!sessionId) {
     res.status(400).json({ error: 'missing_session_id' });
     return;
@@ -951,6 +1063,13 @@ app.get('/api/chat/session', asyncHandler(async (req, res) => {
     res.status(404).json({ error: 'session_not_found' });
     return;
   }
+  const session = result.data;
+  const uid = String(authUser.id);
+  const inSession = uid === String(session.lender_user_id) || uid === String(session.borrower_user_id);
+  if (!inSession) {
+    res.status(403).json({ error: 'forbidden_actor' });
+    return;
+  }
 
   const ratingResp = await supabase
     .from('session_ratings')
@@ -960,15 +1079,33 @@ app.get('/api/chat/session', asyncHandler(async (req, res) => {
   throwIfError(ratingResp.error, 'session_ratings_query_failed');
 
   res.json({
-    session: mapSession(result.data),
-    ratingSummary: buildRatingSummary(ratingResp.data || [], String(userId || ''))
+    session: mapSession(session),
+    ratingSummary: buildRatingSummary(ratingResp.data || [], uid)
   });
 }));
 
 app.get('/api/chat/messages', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
   const { sessionId, afterId } = req.query || {};
   if (!sessionId) {
     res.status(400).json({ error: 'missing_session_id' });
+    return;
+  }
+
+  const sessionResp = await supabase.from('chat_sessions').select('*').eq('id', String(sessionId)).maybeSingle();
+  throwIfError(sessionResp.error, 'session_query_failed');
+  const session = sessionResp.data;
+  if (!session) {
+    res.status(404).json({ error: 'session_not_found' });
+    return;
+  }
+  const uid = String(authUser.id);
+  const inSession = uid === String(session.lender_user_id) || uid === String(session.borrower_user_id);
+  if (!inSession) {
+    res.status(403).json({ error: 'forbidden_actor' });
     return;
   }
 
@@ -991,9 +1128,13 @@ app.get('/api/chat/messages', asyncHandler(async (req, res) => {
 }));
 
 app.post('/api/chat/session/read', asyncHandler(async (req, res) => {
-  const { sessionId, userId, lastReadMessageId } = req.body || {};
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
+  const { sessionId, lastReadMessageId } = req.body || {};
   const sid = String(sessionId || '').trim();
-  const uid = String(userId || '').trim();
+  const uid = String(authUser.id);
   if (!sid || !uid) {
     res.status(400).json({ error: 'missing_required_fields' });
     return;
@@ -1025,7 +1166,17 @@ app.post('/api/chat/session/read', asyncHandler(async (req, res) => {
   throwIfError(latestMsgResp.error, 'messages_query_failed');
   const maxMessageId = toNumber(latestMsgResp.data && latestMsgResp.data.id);
   const requestedReadId = toNumber(lastReadMessageId);
-  const nextReadId = requestedReadId > 0 ? Math.min(requestedReadId, maxMessageId) : maxMessageId;
+  const boundedReadId = requestedReadId > 0 ? Math.min(requestedReadId, maxMessageId) : maxMessageId;
+
+  const prevReadResp = await supabase
+    .from('session_reads')
+    .select('last_read_message_id')
+    .eq('user_id', uid)
+    .eq('session_id', sid)
+    .maybeSingle();
+  throwIfError(prevReadResp.error, 'session_read_query_failed');
+  const prevReadId = toNumber(prevReadResp.data && prevReadResp.data.last_read_message_id);
+  const nextReadId = Math.max(prevReadId, boundedReadId);
 
   const upsertResp = await supabase
     .from('session_reads')
@@ -1048,14 +1199,16 @@ app.post('/api/chat/session/read', asyncHandler(async (req, res) => {
 }));
 
 app.post('/api/chat/messages', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
   const {
     sessionId,
-    senderUserId,
-    senderName,
     text
   } = req.body || {};
 
-  if (!sessionId || !senderUserId || !senderName || !String(text || '').trim()) {
+  if (!sessionId || !String(text || '').trim()) {
     res.status(400).json({ error: 'missing_required_fields' });
     return;
   }
@@ -1068,9 +1221,8 @@ app.post('/api/chat/messages', asyncHandler(async (req, res) => {
     return;
   }
 
-  const senderId = String(senderUserId);
+  const senderId = String(authUser.id);
   const inSession =
-    senderId === 'system' ||
     senderId === String(session.lender_user_id) ||
     senderId === String(session.borrower_user_id);
   if (!inSession) {
@@ -1082,7 +1234,7 @@ app.post('/api/chat/messages', asyncHandler(async (req, res) => {
   const messagePayload = {
     session_id: String(sessionId),
     sender_user_id: senderId,
-    sender_name: String(senderName),
+    sender_name: String(authUser.nickname || ''),
     text: String(text).trim(),
     time: now
   };
@@ -1102,8 +1254,12 @@ app.post('/api/chat/messages', asyncHandler(async (req, res) => {
 }));
 
 app.patch('/api/chat/session/action', asyncHandler(async (req, res) => {
-  const { sessionId, actorUserId, action, reason } = req.body || {};
-  if (!sessionId || !actorUserId || !action) {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
+  const { sessionId, action, reason } = req.body || {};
+  if (!sessionId || !action) {
     res.status(400).json({ error: 'missing_required_fields' });
     return;
   }
@@ -1121,7 +1277,7 @@ app.patch('/api/chat/session/action', asyncHandler(async (req, res) => {
     return;
   }
 
-  const actorId = String(actorUserId);
+  const actorId = String(authUser.id);
   const isLender = actorId === String(session.lender_user_id);
   const isBorrower = actorId === String(session.borrower_user_id);
   if (!isLender && !isBorrower) {
@@ -1214,6 +1370,10 @@ app.patch('/api/chat/session/action', asyncHandler(async (req, res) => {
 }));
 
 app.patch('/api/chat/session/photos', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
   const { sessionId, beforePhotos, afterPhotos } = req.body || {};
   if (!sessionId) {
     res.status(400).json({ error: 'missing_session_id' });
@@ -1225,6 +1385,12 @@ app.patch('/api/chat/session/photos', asyncHandler(async (req, res) => {
   const session = sessionResp.data;
   if (!session) {
     res.status(404).json({ error: 'session_not_found' });
+    return;
+  }
+  const uid = String(authUser.id);
+  const inSession = uid === String(session.lender_user_id) || uid === String(session.borrower_user_id);
+  if (!inSession) {
+    res.status(403).json({ error: 'forbidden_actor' });
     return;
   }
 
@@ -1248,9 +1414,27 @@ app.patch('/api/chat/session/photos', asyncHandler(async (req, res) => {
 }));
 
 app.patch('/api/chat/session/status', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
   const { sessionId, status } = req.body || {};
   if (!sessionId || !status) {
     res.status(400).json({ error: 'missing_required_fields' });
+    return;
+  }
+
+  const sessionResp = await supabase.from('chat_sessions').select('*').eq('id', String(sessionId)).maybeSingle();
+  throwIfError(sessionResp.error, 'session_query_failed');
+  const session = sessionResp.data;
+  if (!session) {
+    res.status(404).json({ error: 'session_not_found' });
+    return;
+  }
+  const uid = String(authUser.id);
+  const inSession = uid === String(session.lender_user_id) || uid === String(session.borrower_user_id);
+  if (!inSession) {
+    res.status(403).json({ error: 'forbidden_actor' });
     return;
   }
 
@@ -1273,7 +1457,11 @@ app.patch('/api/chat/session/status', asyncHandler(async (req, res) => {
 }));
 
 app.get('/api/chat/session/ratings', asyncHandler(async (req, res) => {
-  const { sessionId, userId } = req.query || {};
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
+  const { sessionId } = req.query || {};
   if (!sessionId) {
     res.status(400).json({ error: 'missing_session_id' });
     return;
@@ -1285,6 +1473,13 @@ app.get('/api/chat/session/ratings', asyncHandler(async (req, res) => {
     res.status(404).json({ error: 'session_not_found' });
     return;
   }
+  const session = sessionResp.data;
+  const uid = String(authUser.id);
+  const inSession = uid === String(session.lender_user_id) || uid === String(session.borrower_user_id);
+  if (!inSession) {
+    res.status(403).json({ error: 'forbidden_actor' });
+    return;
+  }
 
   const ratingResp = await supabase
     .from('session_ratings')
@@ -1294,14 +1489,18 @@ app.get('/api/chat/session/ratings', asyncHandler(async (req, res) => {
   throwIfError(ratingResp.error, 'session_ratings_query_failed');
 
   res.json({
-    ratingSummary: buildRatingSummary(ratingResp.data || [], String(userId || ''))
+    ratingSummary: buildRatingSummary(ratingResp.data || [], uid)
   });
 }));
 
 app.post('/api/chat/session/rate', asyncHandler(async (req, res) => {
-  const { sessionId, raterUserId, score, comment } = req.body || {};
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
+  const { sessionId, score, comment } = req.body || {};
   const finalScore = toNumber(score);
-  if (!sessionId || !raterUserId || !finalScore) {
+  if (!sessionId || !finalScore) {
     res.status(400).json({ error: 'missing_required_fields' });
     return;
   }
@@ -1323,7 +1522,7 @@ app.post('/api/chat/session/rate', asyncHandler(async (req, res) => {
     return;
   }
 
-  const actorId = String(raterUserId);
+  const actorId = String(authUser.id);
   const isLender = actorId === String(session.lender_user_id);
   const isBorrower = actorId === String(session.borrower_user_id);
   if (!isLender && !isBorrower) {

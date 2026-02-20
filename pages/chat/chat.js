@@ -10,7 +10,7 @@ const {
 } = require('../../utils/chat-api');
 
 const MAX_PHOTO_COUNT = 3;
-const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_MS = 3000;
 const DATA_URL_PREFIX = 'data:';
 const ORDER_STAGE_LABELS = ['待同意', '借用中', '待归还确认', '已完成'];
 
@@ -89,6 +89,7 @@ Page({
     compareRows: [],
     lastMessageAnchor: '',
     ratingSummary: null,
+    lastReadMessageIdSent: 0,
     loading: true
   },
 
@@ -110,7 +111,8 @@ Page({
   onLoad(options) {
     this.isPageAlive = true;
     this.safeSetData({
-      sessionId: options.sessionId || ''
+      sessionId: options.sessionId || '',
+      lastReadMessageIdSent: 0
     }, { allowHidden: true });
   },
 
@@ -262,10 +264,8 @@ Page({
     }
 
     try {
-      const currentUser = this.data.currentUser || getCurrentUser() || null;
-      const userId = currentUser ? String(currentUser.id) : '';
       const [sessionResp, messageResp] = await Promise.all([
-        getChatSession(sessionId, userId),
+        getChatSession(sessionId),
         getChatMessages(sessionId)
       ]);
 
@@ -293,10 +293,8 @@ Page({
     }
 
     try {
-      const currentUser = this.data.currentUser || getCurrentUser() || null;
-      const userId = currentUser ? String(currentUser.id) : '';
       const [sessionResp, messageResp] = await Promise.all([
-        getChatSession(sessionId, userId),
+        getChatSession(sessionId),
         getChatMessages(sessionId)
       ]);
 
@@ -320,11 +318,17 @@ Page({
       return;
     }
     const lastMessage = (messages || [])[messages.length - 1];
+    const nextReadId = lastMessage ? Number(lastMessage.id) : 0;
+    if (!nextReadId || nextReadId <= Number(this.data.lastReadMessageIdSent || 0)) {
+      return;
+    }
     try {
       await markChatSessionRead({
         sessionId,
-        userId: String(currentUser.id),
-        lastReadMessageId: lastMessage ? Number(lastMessage.id) : 0
+        lastReadMessageId: nextReadId
+      });
+      this.safeSetData({
+        lastReadMessageIdSent: nextReadId
       });
     } catch (err) {
       // silent
@@ -353,8 +357,6 @@ Page({
     try {
       await sendChatMessage({
         sessionId,
-        senderUserId: String(currentUser.id),
-        senderName: currentUser.nickname,
         text
       });
       this.safeSetData({ messageText: '' });
@@ -387,7 +389,6 @@ Page({
     try {
       await runChatSessionAction({
         sessionId: this.data.sessionId,
-        actorUserId: String(currentUser.id),
         action,
         reason
       });
@@ -613,7 +614,6 @@ Page({
     try {
       const resp = await rateChatSession({
         sessionId: this.data.sessionId,
-        raterUserId: String(currentUser.id),
         score,
         comment
       });
