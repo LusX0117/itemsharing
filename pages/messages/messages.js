@@ -34,7 +34,7 @@ Page({
     }
 
     try {
-      const resp = await getChatSessions(String(currentUser.id));
+      const resp = await getChatSessions();
       const sessions = (resp.sessions || []).map((session) => ({
         ...session,
         updatedAtText: formatDateTime(session.updatedAt),

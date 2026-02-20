@@ -49,7 +49,7 @@ Page({
 
     if (currentUser) {
       try {
-        const resp = await getChatSessions(String(currentUser.id));
+        const resp = await getChatSessions();
         sessionCount = (resp.sessions || []).length;
       } catch (err) {
         sessionCount = 0;
@@ -72,7 +72,7 @@ Page({
     }
 
     try {
-      const resp = await getManagePosts(String(currentUser.id));
+      const resp = await getManagePosts();
       const myPostCount = (resp.items || []).length + (resp.demands || []).length;
       this.setData({
         isAdmin: Boolean(resp.isAdmin || currentUser.isAdmin),

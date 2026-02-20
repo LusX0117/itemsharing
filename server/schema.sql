@@ -104,3 +104,52 @@ alter table public.chat_sessions enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.session_ratings enable row level security;
 alter table public.session_reads enable row level security;
+
+drop policy if exists users_service_role_all on public.users;
+create policy users_service_role_all on public.users
+  for all
+  to public
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+drop policy if exists item_posts_service_role_all on public.item_posts;
+create policy item_posts_service_role_all on public.item_posts
+  for all
+  to public
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+drop policy if exists demand_posts_service_role_all on public.demand_posts;
+create policy demand_posts_service_role_all on public.demand_posts
+  for all
+  to public
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+drop policy if exists chat_sessions_service_role_all on public.chat_sessions;
+create policy chat_sessions_service_role_all on public.chat_sessions
+  for all
+  to public
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+drop policy if exists chat_messages_service_role_all on public.chat_messages;
+create policy chat_messages_service_role_all on public.chat_messages
+  for all
+  to public
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+drop policy if exists session_ratings_service_role_all on public.session_ratings;
+create policy session_ratings_service_role_all on public.session_ratings
+  for all
+  to public
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+drop policy if exists session_reads_service_role_all on public.session_reads;
+create policy session_reads_service_role_all on public.session_reads
+  for all
+  to public
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');

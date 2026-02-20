@@ -1,4 +1,5 @@
 const { API_BASE_URL } = require('./api-config');
+const { getAuthHeaders } = require('./db');
 const POST_BASE_URL = API_BASE_URL;
 
 const request = ({ url, method = 'GET', data }) => new Promise((resolve, reject) => {
@@ -6,6 +7,7 @@ const request = ({ url, method = 'GET', data }) => new Promise((resolve, reject)
     url: `${POST_BASE_URL}${url}`,
     method,
     data,
+    header: getAuthHeaders(),
     timeout: 10000,
     success: (res) => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -22,8 +24,8 @@ const getHomePosts = () => request({
   url: '/api/posts/home'
 });
 
-const getManagePosts = (userId) => request({
-  url: `/api/posts/manage?userId=${encodeURIComponent(String(userId))}`
+const getManagePosts = () => request({
+  url: '/api/posts/manage'
 });
 
 const createItemPost = (payload) => request({
