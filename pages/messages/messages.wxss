@@ -46,6 +46,11 @@ page {
   margin-bottom: 8rpx;
 }
 
+.session-card {
+  display: flex;
+  flex-direction: column;
+}
+
 .session-head-right {
   display: flex;
   align-items: center;
@@ -93,7 +98,14 @@ page {
 }
 
 .chat-btn {
-  margin-top: 14rpx;
+  margin: 0;
+  margin-left: auto;
   background: var(--brand) !important;
   color: #ffffff !important;
+}
+
+.session-action-row {
+  margin-top: 14rpx;
+  display: flex;
+  justify-content: flex-end;
 }
