@@ -1,3 +1,6 @@
+begin;
+
+-- 用户
 create table if not exists public.users (
   id text primary key,
   phone text not null unique,
@@ -7,8 +10,11 @@ create table if not exists public.users (
   created_at bigint not null
 );
 
+-- 老版本兼容
 alter table public.users add column if not exists is_admin boolean not null default false;
+alter table public.users add column if not exists created_at bigint not null default (extract(epoch from now()) * 1000)::bigint;
 
+-- 出借帖子
 create table if not exists public.item_posts (
   id bigserial primary key,
   title text not null,
@@ -26,6 +32,7 @@ create table if not exists public.item_posts (
   updated_at bigint not null
 );
 
+-- 求借帖子
 create table if not exists public.demand_posts (
   id text primary key,
   title text not null,
@@ -43,6 +50,7 @@ create table if not exists public.demand_posts (
   updated_at bigint not null
 );
 
+-- 聊天会话
 create table if not exists public.chat_sessions (
   id text primary key,
   item_id bigint not null,
@@ -58,6 +66,7 @@ create table if not exists public.chat_sessions (
   updated_at bigint not null
 );
 
+-- 聊天消息
 create table if not exists public.chat_messages (
   id bigserial primary key,
   session_id text not null references public.chat_sessions(id) on delete cascade,
@@ -67,6 +76,7 @@ create table if not exists public.chat_messages (
   time bigint not null
 );
 
+-- 会话评价
 create table if not exists public.session_ratings (
   id bigserial primary key,
   session_id text not null references public.chat_sessions(id) on delete cascade,
@@ -78,6 +88,7 @@ create table if not exists public.session_ratings (
   unique (session_id, rater_user_id)
 );
 
+-- 会话已读进度
 create table if not exists public.session_reads (
   user_id text not null,
   session_id text not null references public.chat_sessions(id) on delete cascade,
@@ -86,6 +97,7 @@ create table if not exists public.session_reads (
   primary key (user_id, session_id)
 );
 
+-- 索引
 create index if not exists idx_messages_session_time on public.chat_messages(session_id, time);
 create index if not exists idx_sessions_lender on public.chat_sessions(lender_user_id, updated_at);
 create index if not exists idx_sessions_borrower on public.chat_sessions(borrower_user_id, updated_at);
@@ -97,6 +109,7 @@ create index if not exists idx_ratings_session_target on public.session_ratings(
 create index if not exists idx_ratings_target on public.session_ratings(target_user_id, created_at);
 create index if not exists idx_session_reads_user_updated on public.session_reads(user_id, updated_at);
 
+-- RLS
 alter table public.users enable row level security;
 alter table public.item_posts enable row level security;
 alter table public.demand_posts enable row level security;
@@ -105,51 +118,47 @@ alter table public.chat_messages enable row level security;
 alter table public.session_ratings enable row level security;
 alter table public.session_reads enable row level security;
 
+-- 当前后端使用 service role key 访问，这里仅放行 service_role
 drop policy if exists users_service_role_all on public.users;
 create policy users_service_role_all on public.users
-  for all
-  to public
+  for all to public
   using (auth.role() = 'service_role')
   with check (auth.role() = 'service_role');
 
 drop policy if exists item_posts_service_role_all on public.item_posts;
 create policy item_posts_service_role_all on public.item_posts
-  for all
-  to public
+  for all to public
   using (auth.role() = 'service_role')
   with check (auth.role() = 'service_role');
 
 drop policy if exists demand_posts_service_role_all on public.demand_posts;
 create policy demand_posts_service_role_all on public.demand_posts
-  for all
-  to public
+  for all to public
   using (auth.role() = 'service_role')
   with check (auth.role() = 'service_role');
 
 drop policy if exists chat_sessions_service_role_all on public.chat_sessions;
 create policy chat_sessions_service_role_all on public.chat_sessions
-  for all
-  to public
+  for all to public
   using (auth.role() = 'service_role')
   with check (auth.role() = 'service_role');
 
 drop policy if exists chat_messages_service_role_all on public.chat_messages;
 create policy chat_messages_service_role_all on public.chat_messages
-  for all
-  to public
+  for all to public
   using (auth.role() = 'service_role')
   with check (auth.role() = 'service_role');
 
 drop policy if exists session_ratings_service_role_all on public.session_ratings;
 create policy session_ratings_service_role_all on public.session_ratings
-  for all
-  to public
+  for all to public
   using (auth.role() = 'service_role')
   with check (auth.role() = 'service_role');
 
 drop policy if exists session_reads_service_role_all on public.session_reads;
 create policy session_reads_service_role_all on public.session_reads
-  for all
-  to public
+  for all to public
   using (auth.role() = 'service_role')
   with check (auth.role() = 'service_role');
+
+commit;
