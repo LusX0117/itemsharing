@@ -21,7 +21,9 @@
       <view class="session-meta">出借者：{{item.lenderName}}</view>
       <view class="session-meta">借用者：{{item.borrowerName}}</view>
       <view class="session-meta">最近更新：{{item.updatedAtText}}</view>
-      <button class="chat-btn" size="mini" data-id="{{item.id}}" bindtap="openChat">进入聊天与拍照对比</button>
+      <view class="session-action-row">
+        <button class="chat-btn" size="mini" data-id="{{item.id}}" bindtap="openChat">进入聊天与拍照对比</button>
+      </view>
     </view>
   </view>
 </scroll-view>

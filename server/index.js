@@ -139,8 +139,70 @@ const toNumber = (value) => {
 
 const genId = (prefix) => `${prefix}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 
-const normalizePhone = (phone) => String(phone || '').trim();
+const AUTH_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const AUTH_RATE_LIMIT_MAX_PER_IP = Number(process.env.AUTH_RATE_LIMIT_MAX_PER_IP || 80);
+const AUTH_RATE_LIMIT_MAX_PER_PHONE = Number(process.env.AUTH_RATE_LIMIT_MAX_PER_PHONE || 30);
+const authRateBuckets = new Map();
+
+const normalizePhone = (phone) => {
+  const raw = String(phone || '').trim();
+  const compact = raw.replace(/[\s-]/g, '');
+  if (compact.startsWith('+86')) {
+    return compact.slice(3);
+  }
+  if (compact.startsWith('0086')) {
+    return compact.slice(4);
+  }
+  if (compact.startsWith('86') && compact.length === 13) {
+    return compact.slice(2);
+  }
+  return compact;
+};
+const isValidMainlandPhone = (phone) => /^1[3-9]\d{9}$/.test(String(phone || ''));
 const normalizeNickname = (nickname) => String(nickname || '').trim();
+
+const getClientIp = (req) => String(
+  ((req.headers && (req.headers['x-forwarded-for'] || req.headers['x-real-ip'])) || req.ip || '')
+)
+  .split(',')[0]
+  .trim() || 'unknown';
+
+const consumeRateBucket = (key, maxCount, windowMs) => {
+  const now = Date.now();
+  const safeMaxCount = Number.isFinite(maxCount) && maxCount > 0 ? maxCount : 1;
+  const safeWindowMs = Number.isFinite(windowMs) && windowMs > 0 ? windowMs : 60000;
+
+  const current = authRateBuckets.get(key);
+  if (!current || now - current.windowStart >= safeWindowMs) {
+    authRateBuckets.set(key, { count: 1, windowStart: now });
+    return true;
+  }
+
+  if (current.count >= safeMaxCount) {
+    return false;
+  }
+
+  current.count += 1;
+  authRateBuckets.set(key, current);
+  return true;
+};
+
+const clearRateBucket = (key) => {
+  authRateBuckets.delete(key);
+};
+
+const checkAuthThrottle = (req, phone) => {
+  const ipKey = `auth_ip:${getClientIp(req)}`;
+  const okByIp = consumeRateBucket(ipKey, AUTH_RATE_LIMIT_MAX_PER_IP, AUTH_RATE_LIMIT_WINDOW_MS);
+  if (!okByIp) {
+    return false;
+  }
+  if (!phone) {
+    return true;
+  }
+  const phoneKey = `auth_phone:${String(phone)}`;
+  return consumeRateBucket(phoneKey, AUTH_RATE_LIMIT_MAX_PER_PHONE, AUTH_RATE_LIMIT_WINDOW_MS);
+};
 
 const buildPasswordHash = (password) => {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -451,11 +513,15 @@ app.get('/api/health', asyncHandler(async (_req, res) => {
 
 app.post('/api/auth/register', asyncHandler(async (req, res) => {
   const phone = normalizePhone(req.body && req.body.phone);
-  const password = String((req.body && req.body.password) || '');
+  const password = String((req.body && req.body.password) || '').trim();
   const nickname = normalizeNickname(req.body && req.body.nickname);
 
-  if (!/^1\d{10}$/.test(phone) || password.length < 6 || !nickname) {
+  if (!isValidMainlandPhone(phone) || password.length < 6 || password.length > 64 || !nickname || nickname.length > 30) {
     res.status(400).json({ error: 'invalid_params' });
+    return;
+  }
+  if (!checkAuthThrottle(req, phone)) {
+    res.status(429).json({ error: 'too_many_requests' });
     return;
   }
 
@@ -484,10 +550,14 @@ app.post('/api/auth/register', asyncHandler(async (req, res) => {
 
 app.post('/api/auth/login', asyncHandler(async (req, res) => {
   const phone = normalizePhone(req.body && req.body.phone);
-  const password = String((req.body && req.body.password) || '');
+  const password = String((req.body && req.body.password) || '').trim();
 
-  if (!/^1\d{10}$/.test(phone) || password.length < 6) {
+  if (!isValidMainlandPhone(phone) || password.length < 6 || password.length > 64) {
     res.status(400).json({ error: 'invalid_params' });
+    return;
+  }
+  if (!checkAuthThrottle(req, phone)) {
+    res.status(429).json({ error: 'too_many_requests' });
     return;
   }
 
@@ -503,6 +573,7 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
     res.status(401).json({ error: 'invalid_credentials' });
     return;
   }
+  clearRateBucket(`auth_phone:${phone}`);
 
   res.json({
     user: mapUser(result.data)
