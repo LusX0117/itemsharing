@@ -47,7 +47,7 @@ Page({
 
   validateBaseForm() {
     const { phone, password } = this.data.form;
-    if (!/^1\d{10}$/.test(phone)) {
+    if (!/^1[3-9]\d{9}$/.test(String(phone).trim())) {
       wx.showToast({ title: '请输入正确手机号', icon: 'none' });
       return false;
     }
@@ -85,7 +85,8 @@ Page({
         id: String(user.id),
         phone: user.phone,
         nickname: user.nickname,
-        isAdmin: Boolean(user.isAdmin)
+        isAdmin: Boolean(user.isAdmin),
+        token: String(resp.token || '')
       });
 
       wx.showToast({ title: '注册成功', icon: 'success' });
@@ -96,6 +97,10 @@ Page({
       const text = String((err && err.message) || '');
       if (text.includes('phone_already_registered')) {
         wx.showToast({ title: '手机号已注册', icon: 'none' });
+        return;
+      }
+      if (text.includes('too_many_requests')) {
+        wx.showToast({ title: '操作过于频繁，请稍后再试', icon: 'none' });
         return;
       }
       wx.showToast({ title: '注册失败', icon: 'none' });
@@ -122,7 +127,8 @@ Page({
         id: String(user.id),
         phone: user.phone,
         nickname: user.nickname,
-        isAdmin: Boolean(user.isAdmin)
+        isAdmin: Boolean(user.isAdmin),
+        token: String(resp.token || '')
       });
 
       wx.showToast({ title: '登录成功', icon: 'success' });
@@ -133,6 +139,10 @@ Page({
       const text = String((err && err.message) || '');
       if (text.includes('invalid_credentials')) {
         wx.showToast({ title: '账号或密码错误', icon: 'none' });
+        return;
+      }
+      if (text.includes('too_many_requests')) {
+        wx.showToast({ title: '尝试过多，请稍后再试', icon: 'none' });
         return;
       }
       wx.showToast({ title: '登录失败', icon: 'none' });

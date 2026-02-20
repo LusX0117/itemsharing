@@ -1,4 +1,5 @@
 const { API_BASE_URL } = require('./api-config');
+const { getAuthHeaders } = require('./db');
 const CHAT_BASE_URL = API_BASE_URL;
 
 const request = ({ url, method = 'GET', data }) => new Promise((resolve, reject) => {
@@ -6,6 +7,7 @@ const request = ({ url, method = 'GET', data }) => new Promise((resolve, reject)
     url: `${CHAT_BASE_URL}${url}`,
     method,
     data,
+    header: getAuthHeaders(),
     timeout: 10000,
     success: (res) => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -24,14 +26,13 @@ const startChatSession = (payload) => request({
   data: payload
 });
 
-const getChatSessions = (userId) => request({
-  url: `/api/chat/sessions?userId=${encodeURIComponent(String(userId))}`
+const getChatSessions = () => request({
+  url: '/api/chat/sessions'
 });
 
-const getChatSession = (sessionId, userId) => {
-  const userSuffix = userId ? `&userId=${encodeURIComponent(String(userId))}` : '';
+const getChatSession = (sessionId) => {
   return request({
-    url: `/api/chat/session?sessionId=${encodeURIComponent(String(sessionId))}${userSuffix}`
+    url: `/api/chat/session?sessionId=${encodeURIComponent(String(sessionId))}`
   });
 };
 
@@ -72,10 +73,9 @@ const markChatSessionRead = (payload) => request({
   data: payload
 });
 
-const getSessionRatings = (sessionId, userId) => {
-  const userSuffix = userId ? `&userId=${encodeURIComponent(String(userId))}` : '';
+const getSessionRatings = (sessionId) => {
   return request({
-    url: `/api/chat/session/ratings?sessionId=${encodeURIComponent(String(sessionId))}${userSuffix}`
+    url: `/api/chat/session/ratings?sessionId=${encodeURIComponent(String(sessionId))}`
   });
 };
 

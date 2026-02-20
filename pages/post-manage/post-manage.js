@@ -83,7 +83,7 @@ Page({
 
     this.setData({ loading: true });
     try {
-      const resp = await getManagePosts(String(currentUser.id));
+      const resp = await getManagePosts();
       this.setData({
         isAdmin: Boolean(resp.isAdmin || currentUser.isAdmin),
         manageItems: resp.items || [],

@@ -119,10 +119,31 @@ const clearLegacyAuthStorage = () => {
 
 const getCurrentUser = () => {
   const user = wx.getStorageSync(DB_KEYS.CURRENT_USER);
-  return user ? deepClone(user) : null;
+  if (!user) {
+    return null;
+  }
+  if (!user.token) {
+    try {
+      wx.removeStorageSync(DB_KEYS.CURRENT_USER);
+    } catch (err) {
+      // ignore
+    }
+    return null;
+  }
+  return deepClone(user);
 };
 const setCurrentUser = (user) => wx.setStorageSync(DB_KEYS.CURRENT_USER, deepClone(user));
 const clearCurrentUser = () => wx.removeStorageSync(DB_KEYS.CURRENT_USER);
+const getAuthHeaders = () => {
+  const user = getCurrentUser();
+  const token = user && user.token ? String(user.token) : '';
+  if (!token) {
+    return {};
+  }
+  return {
+    Authorization: `Bearer ${token}`
+  };
+};
 
 const getItems = () => {
   const items = ensureListTable(DB_KEYS.ITEMS, seedItems);
@@ -154,6 +175,7 @@ module.exports = {
   DB_KEYS,
   clearLegacyAuthStorage,
   getCurrentUser,
+  getAuthHeaders,
   setCurrentUser,
   clearCurrentUser,
   getItems,

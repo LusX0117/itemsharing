@@ -26,13 +26,14 @@
 ```env
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+AUTH_TOKEN_SECRET=replace-with-a-long-random-string
 PORT=3007
 ADMIN_PHONE=19900000000
 ADMIN_PASSWORD=admin123
 ADMIN_NICKNAME=系统管理员
 ```
 
-说明：`SUPABASE_SERVICE_ROLE_KEY` 只能放服务端，不能放小程序端。
+说明：`SUPABASE_SERVICE_ROLE_KEY` 与 `AUTH_TOKEN_SECRET` 都只能放服务端，不能放小程序端。
 
 ### 3. 启动服务
 
@@ -97,6 +98,7 @@ npm start
 - 聊天 API：`utils/chat-api.js`
 - 认证 API：`utils/auth-api.js`
 - 帖子 API：`utils/post-api.js`
+- 升级到 token 鉴权后，旧本地登录态会失效，需在小程序里重新登录一次
 - 如果在微信开发者工具里请求被拦截，请在项目设置里关闭“校验合法域名、web-view（业务域名）、TLS版本以及HTTPS证书”用于本地调试，或把后端部署到可配置域名
 
 ## 测试真实聊天
