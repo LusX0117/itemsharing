@@ -5,41 +5,49 @@
 <view wx:elif="{{session}}" class="chat-page">
   <view class="header-section">
     <view class="nav-bar">
-      <view class="back-btn" bindtap="goBack">←</view>
       <view class="user-info">
         <view class="avatar">{{session.peerInitial}}</view>
         <view class="user-name">{{session.peerName}}</view>
       </view>
-      <view class="nav-placeholder"></view>
     </view>
 
-    <view class="item-card-sticky">
+    <view class="item-card-sticky" bindtap="openItemDetail">
       <view class="item-thumb">{{session.itemTitleShort}}</view>
       <view class="item-details">
         <view class="item-title">{{session.itemTitle}}</view>
         <view class="status-badge {{session.statusBadgeClass}}">{{session.statusBadgeText}}</view>
       </view>
-    </view>
-
-    <view class="entry-row">
-      <button class="entry-btn" size="mini" bindtap="openItemDetail">物品详情页</button>
-      <button class="entry-btn" size="mini" bindtap="openRatingPage">评价页</button>
+      <button
+        wx:if="{{session.canChangeStatus}}"
+        class="status-action-btn {{session.statusActionClass}}"
+        size="mini"
+        catchtap="onStatusActionTap"
+      >{{session.statusActionText}}</button>
     </view>
   </view>
 
-  <view class="chat-card">
-    <scroll-view class="chat-area" scroll-y scroll-with-animation scroll-into-view="{{lastMessageAnchor}}">
-      <view wx:for="{{messageList}}" wx:key="id" id="msg-{{item.id}}" class="message {{item.mine ? 'sent' : 'received'}} {{item.sender === 'system' ? 'system' : ''}}">
+  <view class="stepper-container">
+    <view class="stepper-line"></view>
+    <view wx:for="{{session.stageSteps}}" wx:key="label" class="step {{item.current ? 'active' : ''}} {{item.done ? 'completed' : ''}}">
+      <view class="step-dot"></view>
+      <view class="step-label">{{item.label}}</view>
+    </view>
+  </view>
+
+  <scroll-view class="chat-area" scroll-y scroll-with-animation scroll-into-view="{{lastMessageAnchor}}">
+    <view wx:for="{{messageList}}" wx:key="id" id="msg-{{item.id}}" class="message-row {{item.mine ? 'mine' : 'other'}} {{item.sender === 'system' ? 'system' : ''}}">
+      <view class="message {{item.mine ? 'sent' : 'received'}} {{item.sender === 'system' ? 'system' : ''}}">
         <view class="message-text">{{item.text}}</view>
         <view class="timestamp">{{item.timeText}}</view>
       </view>
-      <view wx:if="{{!messageList || messageList.length === 0}}" class="empty">暂无聊天记录，先发一条消息吧。</view>
-    </scroll-view>
-  </view>
+    </view>
+    <view wx:if="{{!messageList || messageList.length === 0}}" class="empty">暂无聊天记录，先发一条消息吧。</view>
+  </scroll-view>
 
   <view class="input-bar-container">
     <view class="input-wrapper">
-      <input class="chat-input" placeholder="Type a message..." value="{{messageText}}" bindinput="handleMessageInput" />
+      <view class="attach-btn" bindtap="handleAttachTap">＋</view>
+      <input class="chat-input" placeholder="输入消息..." value="{{messageText}}" bindinput="handleMessageInput" />
       <button class="send-btn" bindtap="sendMessage">↑</button>
     </view>
   </view>

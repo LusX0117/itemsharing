@@ -3,9 +3,8 @@
 <scroll-view class="scrollarea" scroll-y enhanced enable-flex show-scrollbar="false">
   <view class="page-wrap {{bulkMode ? 'bulk-mode' : ''}}">
     <view class="header-row">
-      <view class="header-title">Manage—
-Posts</view>
-      <view class="bulk-toggle" bindtap="toggleBulkMode">{{bulkMode ? 'Cancel' : 'Select'}}</view>
+      <view class="header-title">管理帖子</view>
+      <view class="bulk-toggle" bindtap="toggleBulkMode">{{bulkMode ? '取消' : '选择'}}</view>
     </view>
 
     <view class="tip-text">{{isAdmin ? '管理员：可管理全站帖子' : '仅管理你发布的帖子'}}</view>

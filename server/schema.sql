@@ -63,11 +63,13 @@ create table if not exists public.chat_sessions (
   borrower_user_id text not null,
   borrower_name text not null,
   status text not null default '借用协商中',
-  before_photos jsonb not null default '[]'::jsonb,
-  after_photos jsonb not null default '[]'::jsonb,
   created_at bigint not null,
   updated_at bigint not null
 );
+
+-- 删除已废弃的借前/借后照片字段
+alter table public.chat_sessions drop column if exists before_photos;
+alter table public.chat_sessions drop column if exists after_photos;
 
 -- 聊天消息
 create table if not exists public.chat_messages (

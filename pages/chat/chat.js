@@ -3,10 +3,12 @@ const {
   getChatSession,
   getChatMessages,
   sendChatMessage,
-  markChatSessionRead
+  markChatSessionRead,
+  runChatSessionAction
 } = require('../../utils/chat-api');
 
 const POLL_INTERVAL_MS = 3000;
+const ORDER_STAGE_LABELS = ['已申请', '已同意', '借用中', '已归还'];
 
 const formatDateTime = (timestamp) => {
   const date = new Date(timestamp);
@@ -26,6 +28,46 @@ const resolveStatusBadge = (status, isHidden = false) => {
     return { text, className: 'status-pending' };
   }
   return { text: text || '待处理', className: 'status-flagged' };
+};
+
+const resolveOrderStageInfo = (status) => {
+  const raw = String(status || '');
+  if (['待出借者同意', '借用协商中'].includes(raw)) {
+    return { index: 0, text: '已申请' };
+  }
+  if (raw === '借用中') {
+    return { index: 1, text: '已同意' };
+  }
+  if (raw === '待确认归还') {
+    return { index: 2, text: '借用中' };
+  }
+  if (raw === '已完成') {
+    return { index: 3, text: '已归还' };
+  }
+  return { index: 0, text: '已申请' };
+};
+
+const buildOrderSteps = (status) => {
+  const info = resolveOrderStageInfo(status);
+  return ORDER_STAGE_LABELS.map((label, index) => ({
+    label,
+    done: info.index >= 0 && index < info.index,
+    current: index === info.index
+  }));
+};
+
+const resolvePrimaryStatusAction = ({ status, isLender, isBorrower }) => {
+  const text = String(status || '');
+  if (isLender && ['待出借者同意', '借用协商中'].includes(text)) {
+    return { text: '同意借用', action: 'approve_borrow', className: 'action-approve' };
+  }
+  if (isBorrower && text === '借用中') {
+    return { text: '发起归还', action: 'request_return', className: 'action-return' };
+  }
+  if (isLender && text === '待确认归还') {
+    return { text: '确认归还', action: 'confirm_return', className: 'action-confirm' };
+  }
+  return null;
 };
 
 Page({
@@ -115,10 +157,16 @@ Page({
     const currentUser = this.data.currentUser || getCurrentUser() || null;
     const userId = currentUser ? String(currentUser.id) : '';
     const isLender = userId && userId === String(session.lenderUserId);
+    const isBorrower = userId && userId === String(session.borrowerUserId);
     const peerName = isLender ? String(session.borrowerName || '') : String(session.lenderName || '');
     const peerInitial = peerName ? peerName.slice(0, 1) : '友';
     const statusBadge = resolveStatusBadge(session.status, false);
-    const itemTitleShort = String(session.itemTitle || '').slice(0, 4) || 'ITEM';
+    const itemTitleShort = String(session.itemTitle || '').slice(0, 4) || '物品';
+    const primaryAction = resolvePrimaryStatusAction({
+      status: session.status,
+      isLender,
+      isBorrower
+    });
 
     return {
       ...session,
@@ -126,7 +174,12 @@ Page({
       peerInitial,
       itemTitleShort,
       statusBadgeText: statusBadge.text,
-      statusBadgeClass: statusBadge.className
+      statusBadgeClass: statusBadge.className,
+      stageSteps: buildOrderSteps(session.status),
+      canChangeStatus: Boolean(primaryAction),
+      statusActionText: primaryAction ? primaryAction.text : '',
+      statusActionType: primaryAction ? primaryAction.action : '',
+      statusActionClass: primaryAction ? primaryAction.className : ''
     };
   },
 
@@ -252,6 +305,82 @@ Page({
         wx.showToast({ title: '发送失败', icon: 'none' });
       }
     }
+  },
+
+  onStatusActionTap() {
+    const session = this.data.session;
+    if (!session || !session.canChangeStatus || !session.statusActionType) {
+      return;
+    }
+    const action = String(session.statusActionType);
+    if (action === 'request_return') {
+      wx.showModal({
+        title: '发起归还确认？',
+        content: '发起后需出借者确认才能完成借用。',
+        success: (res) => {
+          if (res.confirm) {
+            this.commitStatusAction(action, '已发起归还确认');
+          }
+        }
+      });
+      return;
+    }
+    if (action === 'confirm_return') {
+      wx.showModal({
+        title: '确认已归还？',
+        content: '确认后将自动跳转到评价页面。',
+        success: (res) => {
+          if (res.confirm) {
+            this.commitStatusAction(action, '已确认归还', { toRating: true });
+          }
+        }
+      });
+      return;
+    }
+    if (action === 'approve_borrow') {
+      this.commitStatusAction(action, '已同意借用');
+      return;
+    }
+    this.commitStatusAction(action, '状态已更新');
+  },
+
+  async commitStatusAction(action, successText, options = {}) {
+    try {
+      await runChatSessionAction({
+        sessionId: this.data.sessionId,
+        action
+      });
+      await this.refreshAll();
+      wx.showToast({ title: successText, icon: 'success' });
+      if (options.toRating) {
+        setTimeout(() => {
+          this.openRatingPage();
+        }, 250);
+      }
+    } catch (err) {
+      const msg = String((err && err.message) || '');
+      if (msg.includes('invalid_status_transition')) {
+        wx.showToast({ title: '状态已变化，请刷新后重试', icon: 'none' });
+        await this.refreshAll();
+        return;
+      }
+      wx.showToast({ title: '操作失败', icon: 'none' });
+    }
+  },
+
+  handleAttachTap() {
+    wx.showActionSheet({
+      itemList: ['物品详情页', '评价页'],
+      success: (res) => {
+        if (res.tapIndex === 0) {
+          this.openItemDetail();
+          return;
+        }
+        if (res.tapIndex === 1) {
+          this.openRatingPage();
+        }
+      }
+    });
   },
 
   openItemDetail() {

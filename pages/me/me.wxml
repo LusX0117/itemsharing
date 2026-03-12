@@ -3,8 +3,7 @@
 <scroll-view class="scrollarea" scroll-y enhanced enable-flex show-scrollbar="false">
   <view class="page-wrap">
     <view class="header-row">
-      <view class="header-title">My—
-Profile</view>
+      <view class="header-title">我的主页</view>
       <view class="close-btn" bindtap="goHome">✕</view>
     </view>
 
@@ -13,43 +12,43 @@ Profile</view>
         <view class="avatar">{{avatarText}}</view>
         <view class="user-meta">
           <view class="name-row">
-            <view class="user-name">{{currentUser ? currentUser.nickname : 'Guest User'}}</view>
-            <view wx:if="{{isAdmin}}" class="role-tag">Admin</view>
+            <view class="user-name">{{currentUser ? currentUser.nickname : '游客用户'}}</view>
+            <view wx:if="{{isAdmin}}" class="role-tag">管理员</view>
           </view>
-          <view class="user-id">{{currentUser ? ('Phone: ' + currentUser.phone) : '登录后可查看与管理帖子'}}</view>
+          <view class="user-id">{{currentUser ? ('手机号：' + currentUser.phone) : '登录后可查看与管理帖子'}}</view>
         </view>
       </view>
 
       <view class="stats-row">
         <view class="stat-item">
           <view class="stat-value">{{stats.myPostCount}}</view>
-          <view class="stat-label">Items Offered</view>
+          <view class="stat-label">出借帖子</view>
         </view>
         <view class="stat-item">
           <view class="stat-value">{{stats.sessionCount}}</view>
-          <view class="stat-label">Chats</view>
+          <view class="stat-label">聊天会话</view>
         </view>
         <view class="stat-item">
           <view class="stat-value">{{stats.itemCount}}</view>
-          <view class="stat-label">Platform Posts</view>
+          <view class="stat-label">平台帖子</view>
         </view>
       </view>
     </view>
 
     <view class="menu-card" wx:if="{{currentUser}}">
       <view class="menu-row" bindtap="goPostManage">
-        <view class="menu-label">My Listings</view>
+        <view class="menu-label">我的帖子</view>
         <view class="menu-arrow">→</view>
       </view>
       <view class="menu-row" bindtap="goMessages">
-        <view class="menu-label">Borrow History</view>
+        <view class="menu-label">借用记录</view>
         <view class="menu-arrow">→</view>
       </view>
     </view>
 
     <view class="menu-card" wx:else>
       <view class="menu-row" bindtap="goAuth">
-        <view class="menu-label">Log In / Register</view>
+        <view class="menu-label">登录 / 注册</view>
         <view class="menu-arrow">→</view>
       </view>
     </view>
@@ -57,9 +56,9 @@ Profile</view>
 </scroll-view>
 
 <view class="bottom-action" wx:if="{{currentUser}}">
-  <button class="btn-logout" bindtap="logout">Log Out</button>
+  <button class="btn-logout" bindtap="logout">退出登录</button>
 </view>
 
 <view class="bottom-action" wx:else>
-  <button class="btn-login" bindtap="goAuth">Log In / Register</button>
+  <button class="btn-login" bindtap="goAuth">登录 / 注册</button>
 </view>

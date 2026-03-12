@@ -15,15 +15,15 @@ page {
 }
 
 .header-section {
-  padding: 20rpx 24rpx 14rpx;
+  padding: 20rpx 24rpx 12rpx;
   display: flex;
   flex-direction: column;
-  gap: 14rpx;
+  gap: 12rpx;
 }
 
 .nav-bar {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
 }
 
@@ -47,24 +47,13 @@ page {
 }
 
 .user-name {
-  font-weight: 600;
   font-size: 28rpx;
-}
-
-.back-btn {
-  font-size: 34rpx;
   font-weight: 600;
-  color: #1c1c1e;
-  padding: 4rpx 8rpx;
-}
-
-.nav-placeholder {
-  width: 50rpx;
 }
 
 .item-card-sticky {
   background: #ffffff;
-  border-radius: 18rpx;
+  border-radius: 16rpx;
   padding: 14rpx;
   display: flex;
   align-items: center;
@@ -73,18 +62,19 @@ page {
 }
 
 .item-thumb {
-  width: 72rpx;
-  height: 72rpx;
+  width: 78rpx;
+  height: 78rpx;
   background: #ededed;
   border-radius: 12rpx;
   color: #6b7280;
   font-size: 20rpx;
+  line-height: 1.2;
+  text-align: center;
   display: flex;
   align-items: center;
   justify-content: center;
-  text-align: center;
-  line-height: 1.2;
   padding: 6rpx;
+  box-sizing: border-box;
 }
 
 .item-details {
@@ -93,95 +83,175 @@ page {
 }
 
 .item-title {
-  font-size: 26rpx;
-  font-weight: 700;
+  font-size: 27rpx;
+  font-weight: 600;
   line-height: 1.35;
   word-break: break-all;
 }
 
 .status-badge {
   display: inline-block;
+  margin-top: 6rpx;
   font-size: 18rpx;
-  font-weight: 700;
+  font-weight: 600;
   padding: 4rpx 10rpx;
   border-radius: 8rpx;
-  margin-top: 6rpx;
 }
 
 .status-active {
-  background: #e8f5e9;
   color: #34c759;
+  background: #e8f5e9;
 }
 
 .status-pending {
-  background: #fff3e0;
-  color: #ff9500;
+  color: #f59e0b;
+  background: #fef3c7;
 }
 
 .status-flagged {
-  background: #ffebee;
   color: #ff3b30;
+  background: #ffebee;
 }
 
-.entry-row {
-  display: flex;
-  gap: 10rpx;
-}
-
-.entry-btn {
+.status-action-btn {
   margin: 0;
-  flex: 1;
-  background: #edf0f4 !important;
-  color: #1c1c1e !important;
+  margin-left: 8rpx;
+  min-width: 132rpx;
+  height: 54rpx;
+  line-height: 54rpx;
+  padding: 0 14rpx !important;
+  border-radius: 999rpx !important;
+  font-size: 22rpx;
+  font-weight: 600;
+  flex-shrink: 0;
+  border: 0 !important;
 }
 
-.entry-btn::after {
+.status-action-btn.action-approve {
+  background: #1c1c1e !important;
+  color: #ffffff !important;
+}
+
+.status-action-btn.action-return {
+  background: #2563eb !important;
+  color: #ffffff !important;
+}
+
+.status-action-btn.action-confirm {
+  background: #16a34a !important;
+  color: #ffffff !important;
+}
+
+.status-action-btn::after {
   border: 0;
 }
 
-.chat-card {
-  flex: 1;
-  min-height: 0;
-  margin: 0 24rpx 12rpx;
+.stepper-container {
+  margin-bottom: 12rpx;
+  padding: 0 24rpx;
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+}
+
+.stepper-line {
+  position: absolute;
+  top: 18rpx;
+  left: 50rpx;
+  right: 50rpx;
+  height: 2rpx;
+  background: #d1d1d6;
+  z-index: 1;
+}
+
+.step {
+  width: 25%;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.step-dot {
+  width: 24rpx;
+  height: 24rpx;
+  border-radius: 50%;
   background: #ffffff;
-  border-radius: 20rpx;
-  padding: 16rpx;
+  border: 3rpx solid #d1d1d6;
+}
+
+.step.active .step-dot {
+  background: #1c1c1e;
+  border-color: #1c1c1e;
+}
+
+.step.completed .step-dot {
+  background: #34c759;
+  border-color: #34c759;
+}
+
+.step-label {
+  font-size: 18rpx;
+  font-weight: 500;
+  color: #8e8e93;
+}
+
+.step.active .step-label {
+  color: #1c1c1e;
+  font-weight: 600;
 }
 
 .chat-area {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  padding: 0 24rpx;
+  box-sizing: border-box;
+}
+
+.message-row {
+  width: 100%;
+  display: flex;
+  margin-bottom: 12rpx;
+}
+
+.message-row.other {
+  justify-content: flex-start;
+}
+
+.message-row.mine {
+  justify-content: flex-end;
+}
+
+.message-row.system {
+  justify-content: center;
 }
 
 .message {
-  max-width: 82%;
+  display: inline-block;
+  width: auto;
+  max-width: 80%;
   padding: 14rpx 18rpx;
   border-radius: 22rpx;
   font-size: 24rpx;
   line-height: 1.45;
-  margin-bottom: 10rpx;
+  box-sizing: border-box;
 }
 
 .message.received {
-  align-self: flex-start;
   background: #ffffff;
   color: #1c1c1e;
   border-bottom-left-radius: 8rpx;
-  border: 1rpx solid #eceff3;
 }
 
 .message.sent {
-  align-self: flex-end;
-  margin-left: auto;
-  background: #1c1c1e;
-  color: #ffffff;
+  background: #eceff3;
+  color: #1c1c1e;
   border-bottom-right-radius: 8rpx;
 }
 
 .message.system {
-  align-self: center;
-  margin-left: auto;
-  margin-right: auto;
-  max-width: 92%;
+  max-width: 80%;
   background: #fff7ed;
   color: #9a3412;
   border: 1rpx solid #fed7aa;
@@ -193,14 +263,14 @@ page {
 }
 
 .timestamp {
+  margin-top: 6rpx;
   display: block;
   font-size: 18rpx;
   color: #8e8e93;
-  margin-top: 6rpx;
 }
 
 .message.sent .timestamp {
-  color: rgba(255, 255, 255, 0.68);
+  color: #8e8e93;
   text-align: right;
 }
 
@@ -224,6 +294,20 @@ page {
   box-shadow: 0 8rpx 18rpx rgba(0, 0, 0, 0.05);
 }
 
+.attach-btn {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: #e3e3e5;
+  color: #8e8e93;
+  font-size: 32rpx;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .chat-input {
   flex: 1;
   border: none;
@@ -231,18 +315,28 @@ page {
   font-size: 24rpx;
   height: 56rpx;
   line-height: 56rpx;
-  padding: 0 12rpx;
+  padding: 0 10rpx;
 }
 
 .send-btn {
-  width: 56rpx;
-  height: 56rpx;
-  line-height: 56rpx;
-  border-radius: 50% !important;
+  width: 56rpx !important;
+  height: 56rpx !important;
+  min-width: 56rpx !important;
+  max-width: 56rpx !important;
+  min-height: 56rpx !important;
+  max-height: 56rpx !important;
+  flex: 0 0 56rpx;
+  border-radius: 999rpx !important;
   background: #1c1c1e !important;
   color: #ffffff !important;
   padding: 0 !important;
-  min-width: 56rpx;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .send-btn::after {

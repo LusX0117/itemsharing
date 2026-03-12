@@ -47,8 +47,10 @@ const formatDateText = (timestamp) => {
   if (Number.isNaN(date.getTime())) {
     return '--';
   }
-  const month = date.toLocaleString('en-US', { month: 'short' });
-  return `${month} ${date.getDate()}, ${date.getFullYear()}`;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const getItemStatusClass = (item) => {
@@ -208,14 +210,14 @@ Page({
       const resp = await getManagePosts();
       const manageItems = (resp.items || []).map((item) => ({
         ...item,
-        statusText: item.isHidden ? 'Flagged' : String(item.status || 'Pending'),
+        statusText: item.isHidden ? '已隐藏' : String(item.status || '待处理'),
         statusClass: getItemStatusClass(item),
         dateText: formatDateText(item.updatedAt || item.createdAt),
         _selected: false
       }));
       const manageDemands = (resp.demands || []).map((item) => ({
         ...item,
-        statusText: item.isHidden ? 'Flagged' : String(item.status || 'Pending'),
+        statusText: item.isHidden ? '已隐藏' : String(item.status || '待处理'),
         statusClass: getDemandStatusClass(item),
         dateText: formatDateText(item.updatedAt || item.createdAt),
         _selected: false

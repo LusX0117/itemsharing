@@ -3,8 +3,7 @@
 <scroll-view class="scrollarea" scroll-y enhanced enable-flex show-scrollbar="false">
   <view class="page-wrap">
     <view class="hero-header">
-      <view class="hero-title">Share—
-Network</view>
+      <view class="hero-title">共享校园</view>
       <view class="profile-trigger" bindtap="goMe">{{userInitial}}</view>
     </view>
 
@@ -16,7 +15,7 @@ Network</view>
     <view class="feed-list" wx:if="{{activeTab === 'available'}}">
       <view wx:if="{{items.length === 0}}" class="empty-card">暂无可出借物品</view>
 
-      <view wx:for="{{items}}" wx:key="id" class="feed-card item-card">
+      <view wx:for="{{items}}" wx:key="id" class="feed-card item-card" data-id="{{item.id}}" bindtap="openItemDetail">
         <view class="card-thumb">
           <image wx:if="{{item.photos && item.photos.length}}" class="card-thumb-image" src="{{item.photos[0]}}" mode="aspectFill" />
           <text wx:else>{{item.icon}}</text>
@@ -27,7 +26,7 @@ Network</view>
           <view class="card-meta">{{item.owner}} · {{item.location}}</view>
           <view class="card-price">¥{{item.price}}/天 · 押金 ¥{{item.deposit}}</view>
         </view>
-        <button class="card-action" size="mini" data-id="{{item.id}}" bindtap="applyBorrow">申请借用</button>
+        <button class="card-action" size="mini" data-id="{{item.id}}" catchtap="applyBorrow">申请借用</button>
       </view>
     </view>
 

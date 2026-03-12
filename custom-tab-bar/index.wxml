@@ -10,7 +10,6 @@
       hover-class="none"
     >
       <text class="tab-text">{{item.text}}</text>
-      <view class="tab-dot"></view>
     </navigator>
   </view>
 </view>

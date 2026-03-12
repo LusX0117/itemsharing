@@ -116,12 +116,17 @@ page {
 .btn-submit {
   width: 100%;
   height: 94rpx;
-  line-height: 94rpx;
+  line-height: 1.2;
+  padding: 0 !important;
   border-radius: 999rpx !important;
   background: #1c1c1e !important;
   color: #ffffff !important;
   font-size: 30rpx !important;
   font-weight: 600;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-shadow: 0 12rpx 28rpx rgba(0, 0, 0, 0.15);
 }
 

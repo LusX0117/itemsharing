@@ -387,8 +387,6 @@ const mapSession = (row) => ({
   borrowerUserId: row.borrower_user_id,
   borrowerName: row.borrower_name,
   status: row.status,
-  beforePhotos: parseJsonArray(row.before_photos),
-  afterPhotos: parseJsonArray(row.after_photos),
   unreadCount: toNumber(row.unread_count || row.unreadCount || 0),
   createdAt: toNumber(row.created_at),
   updatedAt: toNumber(row.updated_at)
@@ -1119,8 +1117,6 @@ app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
     borrower_user_id: borrowerId,
     borrower_name: String(users[borrowerId].nickname || ''),
     status: '待出借者同意',
-    before_photos: [],
-    after_photos: [],
     created_at: now,
     updated_at: now
   };
@@ -1431,12 +1427,6 @@ app.patch('/api/chat/session/action', asyncHandler(async (req, res) => {
       res.status(409).json({ error: 'invalid_status_transition' });
       return;
     }
-    const beforePhotos = parseJsonArray(session.before_photos);
-    const afterPhotos = parseJsonArray(session.after_photos);
-    if (!beforePhotos.length || !afterPhotos.length) {
-      res.status(400).json({ error: 'missing_compare_photos' });
-      return;
-    }
     nextStatus = '待确认归还';
     systemText = '借用者已发起归还确认，等待出借者确认。';
   } else if (action === 'confirm_return') {
@@ -1487,50 +1477,6 @@ app.patch('/api/chat/session/action', asyncHandler(async (req, res) => {
     });
     throwIfError(msgResp.error, 'session_action_message_failed');
   }
-
-  res.json({ session: mapSession(updatedResp.data) });
-}));
-
-app.patch('/api/chat/session/photos', asyncHandler(async (req, res) => {
-  const authUser = await requireAuthUser(req, res);
-  if (!authUser) {
-    return;
-  }
-  const { sessionId, beforePhotos, afterPhotos } = req.body || {};
-  if (!sessionId) {
-    res.status(400).json({ error: 'missing_session_id' });
-    return;
-  }
-
-  const sessionResp = await supabase.from('chat_sessions').select('*').eq('id', String(sessionId)).maybeSingle();
-  throwIfError(sessionResp.error, 'session_query_failed');
-  const session = sessionResp.data;
-  if (!session) {
-    res.status(404).json({ error: 'session_not_found' });
-    return;
-  }
-  const uid = String(authUser.id);
-  const inSession = uid === String(session.lender_user_id) || uid === String(session.borrower_user_id);
-  if (!inSession) {
-    res.status(403).json({ error: 'forbidden_actor' });
-    return;
-  }
-
-  const now = Date.now();
-  const nextBefore = Array.isArray(beforePhotos) ? beforePhotos : parseJsonArray(session.before_photos);
-  const nextAfter = Array.isArray(afterPhotos) ? afterPhotos : parseJsonArray(session.after_photos);
-
-  const updatedResp = await supabase
-    .from('chat_sessions')
-    .update({
-      before_photos: nextBefore,
-      after_photos: nextAfter,
-      updated_at: now
-    })
-    .eq('id', String(sessionId))
-    .select('*')
-    .single();
-  throwIfError(updatedResp.error, 'session_photos_update_failed');
 
   res.json({ session: mapSession(updatedResp.data) });
 }));

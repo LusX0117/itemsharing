@@ -23,6 +23,15 @@ page {
   gap: 16rpx;
 }
 
+.page-title {
+  font-size: 54rpx;
+  line-height: 1.08;
+  font-weight: 700;
+  letter-spacing: -1rpx;
+  color: #1c1c1e;
+  padding: 0 8rpx;
+}
+
 .search-container {
   display: flex;
   align-items: center;
