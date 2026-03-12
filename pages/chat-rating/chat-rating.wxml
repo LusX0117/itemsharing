@@ -1,38 +1,65 @@
-<navigation-bar title="评价页" color="black" background="#e3e3e5"></navigation-bar>
+<navigation-bar title="归还评价" color="black" background="#e3e3e5"></navigation-bar>
 
 <view wx:if="{{loading}}" class="missing-page">评价信息加载中...</view>
 
 <view wx:elif="{{session}}" class="rating-page">
   <scroll-view class="content-scroll" scroll-y enhanced enable-flex show-scrollbar="false">
     <view class="content-wrap">
-      <view class="card summary-card">
-        <view class="item-title">{{session.itemTitle}}</view>
-        <view class="item-status">借用状态：{{session.status}}</view>
-        <view class="meta-row">评价对象：{{session.targetName}}</view>
-        <view class="meta-row">对方信用：{{session.targetCreditText}}</view>
-        <view class="meta-row">我的评价：{{session.myRatingText}}</view>
-        <view wx:if="{{session.myRating && session.myRating.comment}}" class="my-comment">“{{session.myRating.comment}}”</view>
-        <button wx:if="{{session.canRate}}" class="rate-btn" bindtap="submitRating">提交评价</button>
+      <view class="header-row">
+        <view class="header-title-wrap">
+          <view class="header-title">归还</view>
+          <view class="header-title">评价</view>
+        </view>
+        <view class="close-btn" bindtap="goBack">✕</view>
       </view>
 
-      <view class="card list-card">
-        <view class="list-title">会话评价记录</view>
-        <view wx:if="{{!session.ratings || session.ratings.length === 0}}" class="empty">当前会话暂无评价记录</view>
-        <view wx:for="{{session.ratings}}" wx:key="id" class="rating-row">
-          <view class="row-head">
-            <view class="rater-name">{{item.raterLabel}}</view>
-            <view class="score">{{item.score}} 星</view>
+      <view class="item-summary-card">
+        <view class="item-thumb">{{session.itemTitleShort}}</view>
+        <view class="item-info">
+          <view class="item-name">{{session.itemTitle}}</view>
+          <view class="status-badge {{session.statusClassName}}">
+            <view class="status-dot"></view>
+            <text>{{session.statusText}}</text>
           </view>
-          <view class="row-meta">{{item.createdAtText}}</view>
-          <view wx:if="{{item.comment}}" class="row-comment">{{item.comment}}</view>
-          <view wx:if="{{!item.comment}}" class="row-comment muted">无评语</view>
+        </view>
+      </view>
+
+      <view class="review-card">
+        <view class="input-group">
+          <view class="input-label center">本次借用体验如何？</view>
+          <view class="rating-container">
+            <text
+              wx:for="{{starOptions}}"
+              wx:key="*this"
+              class="star-btn {{ratingScore >= item ? 'active' : ''}}"
+              data-score="{{item}}"
+              bindtap="selectScore"
+            >★</text>
+          </view>
+          <view wx:if="{{!session.canRate}}" class="readonly-tip">你已提交过评价，当前为只读状态</view>
+        </view>
+
+        <view class="input-group">
+          <view class="input-label">评价内容</view>
+          <textarea
+            class="form-textarea"
+            placeholder="写下你对本次借用的评价..."
+            value="{{reviewText}}"
+            maxlength="300"
+            disabled="{{!session.canRate}}"
+            bindinput="handleReviewInput"
+          ></textarea>
+          <view class="credit-tip">评价对象：{{session.targetName}}（信用 {{session.targetCreditText}}）</view>
         </view>
       </view>
     </view>
   </scroll-view>
 
   <view class="bottom-action">
-    <button class="back-chat-btn" bindtap="goBack">返回聊天页</button>
+    <button class="btn-submit {{!session.canRate ? 'disabled' : ''}}" disabled="{{!session.canRate}}" bindtap="submitRating">
+      <text>{{session.submitButtonText}}</text>
+      <text>→</text>
+    </button>
   </view>
 </view>
 

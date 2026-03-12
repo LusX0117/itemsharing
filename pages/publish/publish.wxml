@@ -3,7 +3,7 @@
 <scroll-view class="scrollarea" scroll-y enhanced enable-flex show-scrollbar="false">
   <view class="page">
     <view class="header-row">
-      <view class="header-title">{{mode === 'lend' ? 'List—\nItem' : 'Need—\nItem'}}</view>
+      <view class="header-title">{{mode === 'lend' ? '发布出借' : '发布求借'}}</view>
       <view class="close-btn" bindtap="goHome">✕</view>
     </view>
 
@@ -117,7 +117,7 @@
 
 <view wx:if="{{currentUser}}" class="bottom-action">
   <button class="btn-submit" bindtap="submitPublish">
-    <text>{{mode === 'lend' ? 'Publish Item' : 'Publish Request'}}</text>
+    <text>{{mode === 'lend' ? '发布物品' : '发布求借'}}</text>
     <text class="btn-icon">→</text>
   </button>
 </view>

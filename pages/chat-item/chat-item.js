@@ -1,87 +1,36 @@
 const { getCurrentUser } = require('../../utils/db');
-const {
-  getChatSession,
-  updateChatSessionPhotos,
-  runChatSessionAction
-} = require('../../utils/chat-api');
+const { getChatSession, startChatSession } = require('../../utils/chat-api');
+const { getHomePosts } = require('../../utils/post-api');
 
-const MAX_PHOTO_COUNT = 3;
-const DATA_URL_PREFIX = 'data:';
-const ORDER_STAGE_LABELS = ['Requested', 'Confirmed', 'Picked Up', 'Returned'];
+const toArray = (value) => (Array.isArray(value) ? value : []);
 
-const buildCompareRows = (beforePhotos, afterPhotos) => {
-  const maxLen = Math.max(beforePhotos.length, afterPhotos.length);
-  const rows = [];
-  for (let i = 0; i < maxLen; i += 1) {
-    rows.push({
-      index: i,
-      before: beforePhotos[i] || '',
-      after: afterPhotos[i] || ''
-    });
-  }
-  return rows;
-};
-
-const isPendingBorrowApproval = (status) => ['待出借者同意', '借用协商中'].includes(String(status || ''));
-
-const resolveOrderStageInfo = (status) => {
-  const raw = String(status || '');
-  if (['待出借者同意', '借用协商中'].includes(raw)) {
-    return { index: 0, text: '待出借者同意' };
-  }
-  if (raw === '借用中') {
-    return { index: 1, text: '借用中' };
-  }
-  if (raw === '待确认归还') {
-    return { index: 2, text: '待确认归还' };
-  }
-  if (raw === '已完成') {
-    return { index: 3, text: '已完成' };
-  }
-  if (raw === '已拒绝') {
-    return { index: -1, text: '已拒绝' };
-  }
-  if (raw === '已取消') {
-    return { index: -1, text: '已取消' };
-  }
-  return { index: 0, text: raw || '待同意' };
-};
-
-const buildOrderSteps = (status) => {
-  const info = resolveOrderStageInfo(status);
-  return ORDER_STAGE_LABELS.map((label, index) => ({
-    label,
-    done: info.index >= 0 && index < info.index,
-    current: index === info.index
-  }));
-};
-
-const resolveStatusBadge = (status, isHidden = false) => {
-  if (isHidden) {
-    return { text: '已隐藏', className: 'status-flagged' };
-  }
-  const text = String(status || '');
-  if (['可借', '借用中', '求借中', '已完成'].includes(text)) {
-    return { text, className: 'status-active' };
-  }
-  if (['待出借者同意', '借用协商中', '待确认归还'].includes(text)) {
-    return { text, className: 'status-pending' };
-  }
-  return { text: text || '待处理', className: 'status-flagged' };
+const dedupeUrls = (list) => {
+  const seen = new Set();
+  const out = [];
+  toArray(list).forEach((url) => {
+    const key = String(url || '').trim();
+    if (!key || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    out.push(key);
+  });
+  return out;
 };
 
 Page({
   data: {
     sessionId: '',
-    session: null,
+    itemId: 0,
     currentUser: null,
-    compareRows: [],
+    session: null,
     loading: true
   },
 
   onLoad(options) {
     this.setData({
-      sessionId: options.sessionId || ''
+      sessionId: String((options && options.sessionId) || ''),
+      itemId: Number((options && options.itemId) || 0)
     });
   },
 
@@ -92,309 +41,182 @@ Page({
     await this.refreshAll();
   },
 
-  buildSessionView(session) {
+  buildSessionView(session, itemInfo) {
     const currentUser = this.data.currentUser || getCurrentUser() || null;
     const userId = currentUser ? String(currentUser.id) : '';
     const isLender = userId && userId === String(session.lenderUserId);
-    const isBorrower = userId && userId === String(session.borrowerUserId);
-    const pendingBorrowApproval = isPendingBorrowApproval(session.status);
-    const orderStage = resolveOrderStageInfo(session.status);
-    const statusBadge = resolveStatusBadge(session.status, false);
+    const chatEntryText = isLender ? '我要借出' : '申请借用';
+
+    const descriptionByPost = String((itemInfo && itemInfo.description) || '').trim();
+    const fallbackDescription = `当前状态：${String(session.status || '待处理')}。请在聊天中沟通借还细节。`;
+    const itemDescription = descriptionByPost || fallbackDescription;
+
+    const postPhotos = toArray(itemInfo && itemInfo.photos);
+    const displayImages = dedupeUrls(postPhotos);
 
     return {
       ...session,
-      orderStageText: orderStage.text,
-      stageSteps: buildOrderSteps(session.status),
-      itemTitleShort: String(session.itemTitle || '').slice(0, 4) || 'ITEM',
-      statusBadgeText: statusBadge.text,
-      statusBadgeClass: statusBadge.className,
-      isLender,
-      isBorrower,
-      pendingBorrowApproval,
-      canApproveBorrow: Boolean(isLender && pendingBorrowApproval),
-      canRejectBorrow: Boolean(isLender && pendingBorrowApproval),
-      canCancelBorrow: Boolean(isBorrower && ['待出借者同意', '借用协商中', '借用中', '待确认归还'].includes(String(session.status))),
-      canRequestReturn: Boolean(isBorrower && String(session.status) === '借用中'),
-      canConfirmReturn: Boolean(isLender && String(session.status) === '待确认归还'),
-      canRejectReturn: Boolean(isLender && String(session.status) === '待确认归还')
+      itemDescription,
+      displayImages,
+      chatEntryText
+    };
+  },
+
+  findItemFromHome(session, homeResp) {
+    const targetId = Number(session.itemId || 0);
+    const items = toArray(homeResp && homeResp.items);
+    if (!targetId || !items.length) {
+      return null;
+    }
+    return items.find((item) => Number(item.id) === targetId) || null;
+  },
+
+  findItemById(homeResp, itemId) {
+    const targetId = Number(itemId || 0);
+    const items = toArray(homeResp && homeResp.items);
+    if (!targetId || !items.length) {
+      return null;
+    }
+    return items.find((item) => Number(item.id) === targetId) || null;
+  },
+
+  buildViewFromItem(item) {
+    const currentUser = this.data.currentUser || getCurrentUser() || null;
+    const userId = currentUser ? String(currentUser.id) : '';
+    const ownerUserId = String(item.ownerUserId || '');
+    const isOwner = userId && ownerUserId && userId === ownerUserId;
+    const chatEntryText = isOwner ? '我要借出' : '申请借用';
+    const itemDescription = String(item.description || '').trim()
+      || '发布者暂未填写描述，请在聊天中沟通借还细节。';
+    const displayImages = dedupeUrls(toArray(item.photos));
+
+    return {
+      itemId: Number(item.id),
+      itemTitle: String(item.title || ''),
+      itemDescription,
+      displayImages,
+      chatEntryText,
+      ownerUserId,
+      ownerName: String(item.owner || ''),
+      status: String(item.status || '可借')
     };
   },
 
   async refreshAll() {
-    const { sessionId } = this.data;
-    if (!sessionId) {
-      this.setData({ loading: false });
+    const sid = String(this.data.sessionId || '');
+    const itemId = Number(this.data.itemId || 0);
+    if (!sid && !itemId) {
+      this.setData({
+        loading: false,
+        session: null
+      });
       return;
     }
 
     try {
-      const resp = await getChatSession(sessionId);
-      const session = resp.session;
-      if (!session) {
-        this.setData({ session: null, loading: false });
+      const homeResp = await getHomePosts().catch(() => ({ items: [] }));
+
+      if (sid) {
+        const sessionResp = await getChatSession(sid);
+        const session = sessionResp && sessionResp.session;
+        if (!session) {
+          this.setData({
+            loading: false,
+            session: null
+          });
+          return;
+        }
+
+        const itemInfo = this.findItemFromHome(session, homeResp);
+        this.setData({
+          loading: false,
+          session: this.buildSessionView(session, itemInfo)
+        });
         return;
       }
-      const viewSession = this.buildSessionView(session);
+
+      const itemInfo = this.findItemById(homeResp, itemId);
+      if (!itemInfo) {
+        this.setData({
+          loading: false,
+          session: null
+        });
+        return;
+      }
+
       this.setData({
-        session: viewSession,
-        compareRows: buildCompareRows(viewSession.beforePhotos || [], viewSession.afterPhotos || []),
-        loading: false
+        loading: false,
+        session: this.buildViewFromItem(itemInfo)
       });
     } catch (err) {
-      this.setData({ loading: false });
+      this.setData({
+        loading: false,
+        session: null
+      });
       wx.showToast({ title: '物品详情加载失败', icon: 'none' });
     }
   },
 
-  async runSessionAction(action, successText, options = {}) {
+  previewItemImage(event) {
+    const current = String((event.currentTarget.dataset && event.currentTarget.dataset.url) || '');
     const session = this.data.session;
-    const currentUser = this.data.currentUser || getCurrentUser();
-    if (!session || !currentUser) {
+    const urls = toArray(session && session.displayImages);
+    if (!current || !urls.length) {
       return;
     }
-    const needComparePhotos = Boolean(options.needComparePhotos);
-    const reason = String(options.reason || '').trim();
-
-    if (needComparePhotos) {
-      if (!(session.beforePhotos || []).length || !(session.afterPhotos || []).length) {
-        wx.showToast({ title: '请先补充借前和归还后照片', icon: 'none' });
-        return;
-      }
-    }
-
-    try {
-      await runChatSessionAction({
-        sessionId: this.data.sessionId,
-        action,
-        reason
-      });
-      await this.refreshAll();
-      wx.showToast({ title: successText, icon: 'success' });
-    } catch (err) {
-      const msg = String((err && err.message) || '');
-      if (msg.includes('invalid_status_transition')) {
-        wx.showToast({ title: '状态已变化，请刷新后重试', icon: 'none' });
-        await this.refreshAll();
-        return;
-      }
-      if (msg.includes('missing_compare_photos')) {
-        wx.showToast({ title: '请先上传借前和归还后照片', icon: 'none' });
-        return;
-      }
-      if (msg.includes('missing_action_reason')) {
-        wx.showToast({ title: '请填写原因', icon: 'none' });
-        return;
-      }
-      wx.showToast({ title: '操作失败', icon: 'none' });
-    }
-  },
-
-  approveBorrow() {
-    this.runSessionAction('approve_borrow', '已同意借用');
-  },
-
-  askActionReason(title) {
-    return new Promise((resolve) => {
-      wx.showModal({
-        title,
-        editable: true,
-        placeholderText: '请填写原因（必填）',
-        success: (res) => {
-          if (!res.confirm) {
-            resolve(null);
-            return;
-          }
-          const text = String(res.content || '').trim();
-          resolve(text || '');
-        },
-        fail: () => resolve(null)
-      });
-    });
-  },
-
-  async rejectBorrow() {
-    const reason = await this.askActionReason('拒绝借用原因');
-    if (reason === null) {
-      return;
-    }
-    if (!reason) {
-      wx.showToast({ title: '请填写原因', icon: 'none' });
-      return;
-    }
-    this.runSessionAction('reject_borrow', '已拒绝借用', { reason });
-  },
-
-  requestReturn() {
-    wx.showModal({
-      title: '发起归还确认？',
-      content: '发起后需出借者确认才能完成借用。',
-      success: (res) => {
-        if (res.confirm) {
-          this.runSessionAction('request_return', '已发起归还确认', { needComparePhotos: true });
-        }
-      }
-    });
-  },
-
-  confirmReturn() {
-    wx.showModal({
-      title: '确认已归还？',
-      content: '确认后本次借用会标记为已完成。',
-      success: (res) => {
-        if (res.confirm) {
-          this.runSessionAction('confirm_return', '已确认归还');
-        }
-      }
-    });
-  },
-
-  async rejectReturn() {
-    const reason = await this.askActionReason('退回归还原因');
-    if (reason === null) {
-      return;
-    }
-    if (!reason) {
-      wx.showToast({ title: '请填写原因', icon: 'none' });
-      return;
-    }
-    this.runSessionAction('reject_return', '已退回归还确认', { reason });
-  },
-
-  async cancelBorrow() {
-    const reason = await this.askActionReason('取消借用原因');
-    if (reason === null) {
-      return;
-    }
-    if (!reason) {
-      wx.showToast({ title: '请填写原因', icon: 'none' });
-      return;
-    }
-    wx.showModal({
-      title: '确认取消借用？',
-      content: '取消后当前借用单会结束。',
-      success: (res) => {
-        if (res.confirm) {
-          this.runSessionAction('cancel_borrow', '已取消借用', { reason });
-        }
-      }
-    });
-  },
-
-  addBeforePhoto() {
-    this.addPhotoByField('beforePhotos');
-  },
-
-  addAfterPhoto() {
-    this.addPhotoByField('afterPhotos');
-  },
-
-  addPhotoByField(fieldName) {
-    const session = this.data.session;
-    if (!session) {
-      return;
-    }
-
-    const currentList = session[fieldName] || [];
-    if (currentList.length >= MAX_PHOTO_COUNT) {
-      wx.showToast({ title: '最多上传3张', icon: 'none' });
-      return;
-    }
-
-    wx.chooseImage({
-      count: MAX_PHOTO_COUNT - currentList.length,
-      sizeType: ['compressed'],
-      sourceType: ['camera', 'album'],
-      success: async (res) => {
-        const pickedPaths = res.tempFilePaths || [];
-        try {
-          const normalizedNewPhotos = await this.normalizePhotosForPersist(pickedPaths);
-          const nextList = [...currentList, ...normalizedNewPhotos].slice(0, MAX_PHOTO_COUNT);
-          const payload = { sessionId: this.data.sessionId };
-          if (fieldName === 'beforePhotos') {
-            payload.beforePhotos = nextList;
-            payload.afterPhotos = session.afterPhotos || [];
-          } else {
-            payload.beforePhotos = session.beforePhotos || [];
-            payload.afterPhotos = nextList;
-          }
-          await updateChatSessionPhotos(payload);
-          await this.refreshAll();
-        } catch (err) {
-          wx.showToast({ title: '照片保存失败', icon: 'none' });
-        }
-      }
-    });
-  },
-
-  getMimeTypeByPath(filePath) {
-    const lower = String(filePath || '').toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    if (lower.endsWith('.gif')) return 'image/gif';
-    return 'image/jpeg';
-  },
-
-  filePathToDataUrl(filePath) {
-    return new Promise((resolve, reject) => {
-      const fs = wx.getFileSystemManager();
-      fs.readFile({
-        filePath,
-        encoding: 'base64',
-        success: (res) => {
-          const base64 = String((res && res.data) || '');
-          if (!base64) {
-            reject(new Error('empty_file'));
-            return;
-          }
-          const mime = this.getMimeTypeByPath(filePath);
-          resolve(`data:${mime};base64,${base64}`);
-        },
-        fail: reject
-      });
-    });
-  },
-
-  async normalizePhotosForPersist(paths) {
-    const list = Array.isArray(paths) ? paths : [];
-    const normalized = [];
-    for (const p of list) {
-      const value = String(p || '');
-      if (!value) {
-        continue;
-      }
-      if (value.startsWith(DATA_URL_PREFIX) || value.startsWith('http://') || value.startsWith('https://')) {
-        normalized.push(value);
-      } else {
-        const dataUrl = await this.filePathToDataUrl(value);
-        normalized.push(dataUrl);
-      }
-    }
-    return normalized;
-  },
-
-  previewPhoto(event) {
-    const url = event.currentTarget.dataset.url;
-    const session = this.data.session;
-    if (!session || !url) {
-      return;
-    }
-
-    const urls = [...(session.beforePhotos || []), ...(session.afterPhotos || [])];
     wx.previewImage({
-      current: url,
+      current,
       urls
     });
   },
 
-  goBack() {
-    const pages = getCurrentPages();
-    if (pages.length > 1) {
-      wx.navigateBack();
+  async goChatPage() {
+    const sid = encodeURIComponent(String(this.data.sessionId || ''));
+    if (sid) {
+      wx.redirectTo({
+        url: `/pages/chat/chat?sessionId=${sid}`
+      });
       return;
     }
-    const sessionId = encodeURIComponent(String(this.data.sessionId || ''));
-    wx.redirectTo({
-      url: `/pages/chat/chat?sessionId=${sessionId}`
-    });
+
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      wx.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+
+    const item = this.data.session || {};
+    const ownerUserId = String(item.ownerUserId || '');
+    if (ownerUserId && ownerUserId === String(currentUser.id)) {
+      wx.switchTab({
+        url: '/pages/messages/messages'
+      });
+      return;
+    }
+
+    if (!item.itemId || !ownerUserId) {
+      wx.showToast({ title: '物品信息不完整', icon: 'none' });
+      return;
+    }
+
+    try {
+      const resp = await startChatSession({
+        itemId: Number(item.itemId),
+        itemTitle: String(item.itemTitle || ''),
+        lenderUserId: ownerUserId,
+        lenderName: String(item.ownerName || '发布者'),
+        borrowerUserId: String(currentUser.id),
+        borrowerName: String(currentUser.nickname || '用户')
+      });
+      const session = resp.session || {};
+      if (!session.id) {
+        throw new Error('session_create_failed');
+      }
+      wx.navigateTo({
+        url: `/pages/chat/chat?sessionId=${session.id}`
+      });
+    } catch (err) {
+      wx.showToast({ title: '进入聊天失败', icon: 'none' });
+    }
   }
 });

@@ -2,6 +2,7 @@
 
 <view class="page-shell">
   <view class="sticky-header">
+    <view class="page-title">搜索</view>
     <view class="search-container">
       <view class="search-bar">
         <text class="search-icon">⌕</text>

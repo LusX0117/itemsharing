@@ -108,6 +108,16 @@ Page({
     });
   },
 
+  openItemDetail(event) {
+    const itemId = Number((event.currentTarget && event.currentTarget.dataset && event.currentTarget.dataset.id) || 0);
+    if (!itemId) {
+      return;
+    }
+    wx.navigateTo({
+      url: `/pages/chat-item/chat-item?itemId=${itemId}`
+    });
+  },
+
   async applyBorrow(event) {
     const currentUser = getCurrentUser();
     if (!currentUser) {

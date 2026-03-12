@@ -4,10 +4,19 @@ const {
   rateChatSession
 } = require('../../utils/chat-api');
 
-const formatDateTime = (timestamp) => {
-  const date = new Date(timestamp);
-  const pad = (value) => String(value).padStart(2, '0');
-  return `${date.getMonth() + 1}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+const STAR_OPTIONS = [1, 2, 3, 4, 5];
+
+const resolveStatusMeta = (status) => {
+  if (String(status) === '已完成') {
+    return {
+      text: '已归还',
+      className: 'returned'
+    };
+  }
+  return {
+    text: String(status || '待处理'),
+    className: 'pending'
+  };
 };
 
 Page({
@@ -16,6 +25,9 @@ Page({
     currentUser: null,
     session: null,
     ratingSummary: null,
+    starOptions: STAR_OPTIONS,
+    ratingScore: 0,
+    reviewText: '',
     loading: true
   },
 
@@ -48,34 +60,21 @@ Page({
     const targetCreditText = targetCredit.ratingCount
       ? `${targetCredit.averageScore} 分（${targetCredit.ratingCount} 条）`
       : '暂无评价';
-    const myRatingText = myRating ? `${myRating.score} 星` : '未评价';
-    const ratings = (summary.ratings || []).map((item) => {
-      const raterUserId = String(item.raterUserId || '');
-      let raterLabel = `用户 ${raterUserId.slice(0, 6) || '-'}`;
-      if (raterUserId === String(session.lenderUserId)) {
-        raterLabel = '出借者';
-      } else if (raterUserId === String(session.borrowerUserId)) {
-        raterLabel = '借用者';
-      }
-      if (raterUserId === userId) {
-        raterLabel = `${raterLabel}（我）`;
-      }
-      return {
-        ...item,
-        raterLabel,
-        createdAtText: formatDateTime(item.createdAt)
-      };
-    });
+    const myRatingText = myRating ? `${myRating.score} 星` : '';
+    const statusMeta = resolveStatusMeta(session.status);
 
     return {
       ...session,
+      itemTitleShort: String(session.itemTitle || '').slice(0, 4) || '物品',
       targetUserId,
       targetName: targetName || '聊天对象',
       targetCreditText,
       myRating,
       myRatingText,
       canRate,
-      ratings
+      statusText: statusMeta.text,
+      statusClassName: statusMeta.className,
+      submitButtonText: canRate ? '提交评价' : '已评价'
     };
   },
 
@@ -94,9 +93,15 @@ Page({
         this.setData({ session: null, loading: false });
         return;
       }
+      const sessionView = this.buildSessionView(session, summary);
+      const myRating = sessionView.myRating || null;
+      const presetScore = myRating ? Number(myRating.score || 0) : 0;
+      const presetComment = myRating ? String(myRating.comment || '') : '';
       this.setData({
-        session: this.buildSessionView(session, summary),
+        session: sessionView,
         ratingSummary: summary,
+        ratingScore: presetScore,
+        reviewText: presetComment,
         loading: false
       });
     } catch (err) {
@@ -105,32 +110,24 @@ Page({
     }
   },
 
-  async chooseScore() {
-    const scoreItems = ['1 星', '2 星', '3 星', '4 星', '5 星'];
-    return new Promise((resolve) => {
-      wx.showActionSheet({
-        itemList: scoreItems,
-        success: (res) => resolve(Number(res.tapIndex) + 1),
-        fail: () => resolve(0)
-      });
+  selectScore(event) {
+    const score = Number(event.currentTarget.dataset.score || 0);
+    const session = this.data.session;
+    if (!session || !session.canRate) {
+      return;
+    }
+    this.setData({
+      ratingScore: score
     });
   },
 
-  async inputRatingComment() {
-    return new Promise((resolve) => {
-      wx.showModal({
-        title: '填写评语（可选）',
-        editable: true,
-        placeholderText: '例如：沟通顺畅，归还及时',
-        success: (res) => {
-          if (!res.confirm) {
-            resolve(null);
-            return;
-          }
-          resolve(String(res.content || '').trim());
-        },
-        fail: () => resolve(null)
-      });
+  handleReviewInput(event) {
+    const session = this.data.session;
+    if (!session || !session.canRate) {
+      return;
+    }
+    this.setData({
+      reviewText: String(event.detail.value || '')
     });
   },
 
@@ -138,15 +135,14 @@ Page({
     const session = this.data.session;
     const currentUser = this.data.currentUser || getCurrentUser();
     if (!session || !currentUser || !session.canRate) {
+      wx.showToast({ title: '当前不可评价', icon: 'none' });
       return;
     }
 
-    const score = await this.chooseScore();
-    if (!score) {
-      return;
-    }
-    const comment = await this.inputRatingComment();
-    if (comment === null) {
+    const score = Number(this.data.ratingScore || 0);
+    const comment = String(this.data.reviewText || '').trim();
+    if (!score || score < 1 || score > 5) {
+      wx.showToast({ title: '请先选择星级', icon: 'none' });
       return;
     }
 
@@ -157,9 +153,13 @@ Page({
         comment
       });
       const summary = resp.ratingSummary || this.data.ratingSummary || { myRating: null, byTarget: {}, ratings: [] };
+      const nextSession = this.buildSessionView(session, summary);
+      const nextMyRating = nextSession.myRating || null;
       this.setData({
         ratingSummary: summary,
-        session: this.buildSessionView(session, summary)
+        session: nextSession,
+        ratingScore: nextMyRating ? Number(nextMyRating.score || 0) : score,
+        reviewText: nextMyRating ? String(nextMyRating.comment || '') : comment
       });
       wx.showToast({ title: '评价已提交', icon: 'success' });
     } catch (err) {
