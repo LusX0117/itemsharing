@@ -4,6 +4,18 @@ const { getHomePosts } = require('../../utils/post-api');
 
 const DEMAND_SESSION_OFFSET = 8000000000000;
 const DEMAND_SESSION_MOD = 900000000000;
+const TAB_INDEX = 0;
+
+const syncTabBarSelected = (page, index) => {
+  if (!page || typeof page.getTabBar !== 'function') {
+    return;
+  }
+  const tabBar = page.getTabBar();
+  if (!tabBar || typeof tabBar.setSelected !== 'function') {
+    return;
+  }
+  tabBar.setSelected(index);
+};
 
 const toDemandSessionItemId = (demandId) => {
   const text = String(demandId || '');
@@ -14,13 +26,41 @@ const toDemandSessionItemId = (demandId) => {
   return DEMAND_SESSION_OFFSET + hash;
 };
 
+const resolveItemIcon = (category) => {
+  const text = String(category || '');
+  if (text.includes('教材')) return '📘';
+  if (text.includes('电子')) return '🔌';
+  if (text.includes('运动')) return '🏸';
+  if (text.includes('生活')) return '🧺';
+  return '📦';
+};
+
+const resolveDemandIcon = (category) => {
+  const text = String(category || '');
+  if (text.includes('教材')) return '📚';
+  if (text.includes('电子')) return '🎥';
+  if (text.includes('运动')) return '🏃';
+  if (text.includes('生活')) return '🏠';
+  return '📝';
+};
+
 Page({
   data: {
+    currentUser: null,
+    userInitial: '我',
+    activeTab: 'available',
     items: [],
     demands: []
   },
 
   onShow() {
+    syncTabBarSelected(this, TAB_INDEX);
+    const currentUser = getCurrentUser();
+    const nickname = currentUser && currentUser.nickname ? String(currentUser.nickname) : '';
+    this.setData({
+      currentUser,
+      userInitial: nickname ? nickname.charAt(0) : '我'
+    });
     this.loadHomeData();
   },
 
@@ -28,8 +68,14 @@ Page({
     try {
       const resp = await getHomePosts();
       this.setData({
-        items: resp.items || [],
-        demands: resp.demands || []
+        items: (resp.items || []).map((item) => ({
+          ...item,
+          icon: resolveItemIcon(item.category)
+        })),
+        demands: (resp.demands || []).map((item) => ({
+          ...item,
+          icon: resolveDemandIcon(item.category)
+        }))
       });
     } catch (err) {
       wx.showToast({ title: '帖子加载失败', icon: 'none' });
@@ -38,6 +84,28 @@ Page({
         demands: []
       });
     }
+  },
+
+  switchTab(event) {
+    const tab = String((event.currentTarget.dataset && event.currentTarget.dataset.tab) || '');
+    if (!tab || tab === this.data.activeTab) {
+      return;
+    }
+    this.setData({
+      activeTab: tab
+    });
+  },
+
+  goMe() {
+    wx.switchTab({
+      url: '/pages/me/me'
+    });
+  },
+
+  goPublish() {
+    wx.switchTab({
+      url: '/pages/publish/publish'
+    });
   },
 
   async applyBorrow(event) {

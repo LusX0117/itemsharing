@@ -25,12 +25,15 @@ create table if not exists public.item_posts (
   deposit numeric not null default 0,
   location text not null,
   description text not null default '',
+  photos jsonb not null default '[]'::jsonb,
   status text not null default '可借',
   is_hidden boolean not null default false,
   hidden_reason text not null default '',
   created_at bigint not null,
   updated_at bigint not null
 );
+
+alter table public.item_posts add column if not exists photos jsonb not null default '[]'::jsonb;
 
 -- 求借帖子
 create table if not exists public.demand_posts (

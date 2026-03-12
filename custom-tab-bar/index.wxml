@@ -1,0 +1,16 @@
+<view class="liquid-shell">
+  <view class="liquid-highlight"></view>
+  <view class="tab-list">
+    <navigator
+      wx:for="{{list}}"
+      wx:key="pagePath"
+      class="tab-item {{selected === index ? 'active' : ''}}"
+      url="{{item.pagePath}}"
+      open-type="switchTab"
+      hover-class="none"
+    >
+      <text class="tab-text">{{item.text}}</text>
+      <view class="tab-dot"></view>
+    </navigator>
+  </view>
+</view>

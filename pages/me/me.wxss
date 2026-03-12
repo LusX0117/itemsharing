@@ -14,7 +14,7 @@ page {
 }
 
 .page {
-  padding: 24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
+  padding: 24rpx 24rpx calc(170rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 

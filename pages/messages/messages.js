@@ -1,5 +1,17 @@
 const { getCurrentUser } = require('../../utils/db');
 const { getChatSessions } = require('../../utils/chat-api');
+const TAB_INDEX = 3;
+
+const syncTabBarSelected = (page, index) => {
+  if (!page || typeof page.getTabBar !== 'function') {
+    return;
+  }
+  const tabBar = page.getTabBar();
+  if (!tabBar || typeof tabBar.setSelected !== 'function') {
+    return;
+  }
+  tabBar.setSelected(index);
+};
 
 const formatDateTime = (timestamp) => {
   const date = new Date(timestamp);
@@ -15,6 +27,7 @@ Page({
   },
 
   async onShow() {
+    syncTabBarSelected(this, TAB_INDEX);
     this.refreshCurrentUser();
     await this.loadSessions();
   },
