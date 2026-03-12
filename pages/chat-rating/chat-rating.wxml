@@ -1,0 +1,39 @@
+<navigation-bar title="评价页" color="black" background="#e3e3e5"></navigation-bar>
+
+<view wx:if="{{loading}}" class="missing-page">评价信息加载中...</view>
+
+<view wx:elif="{{session}}" class="rating-page">
+  <scroll-view class="content-scroll" scroll-y enhanced enable-flex show-scrollbar="false">
+    <view class="content-wrap">
+      <view class="card summary-card">
+        <view class="item-title">{{session.itemTitle}}</view>
+        <view class="item-status">借用状态：{{session.status}}</view>
+        <view class="meta-row">评价对象：{{session.targetName}}</view>
+        <view class="meta-row">对方信用：{{session.targetCreditText}}</view>
+        <view class="meta-row">我的评价：{{session.myRatingText}}</view>
+        <view wx:if="{{session.myRating && session.myRating.comment}}" class="my-comment">“{{session.myRating.comment}}”</view>
+        <button wx:if="{{session.canRate}}" class="rate-btn" bindtap="submitRating">提交评价</button>
+      </view>
+
+      <view class="card list-card">
+        <view class="list-title">会话评价记录</view>
+        <view wx:if="{{!session.ratings || session.ratings.length === 0}}" class="empty">当前会话暂无评价记录</view>
+        <view wx:for="{{session.ratings}}" wx:key="id" class="rating-row">
+          <view class="row-head">
+            <view class="rater-name">{{item.raterLabel}}</view>
+            <view class="score">{{item.score}} 星</view>
+          </view>
+          <view class="row-meta">{{item.createdAtText}}</view>
+          <view wx:if="{{item.comment}}" class="row-comment">{{item.comment}}</view>
+          <view wx:if="{{!item.comment}}" class="row-comment muted">无评语</view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view class="bottom-action">
+    <button class="back-chat-btn" bindtap="goBack">返回聊天页</button>
+  </view>
+</view>
+
+<view wx:else class="missing-page">未找到借用会话</view>

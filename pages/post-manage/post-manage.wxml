@@ -1,45 +1,92 @@
-<navigation-bar title="帖子管理" color="black" background="#f8fbff"></navigation-bar>
+<navigation-bar title="帖子管理" color="black" background="#e3e3e5"></navigation-bar>
 
 <scroll-view class="scrollarea" scroll-y enhanced enable-flex show-scrollbar="false">
-  <view class="page">
-    <view class="card tip">
-      <view class="tip-title">{{isAdmin ? '管理员模式' : '我的帖子'}}</view>
-      <view class="tip-desc">{{isAdmin ? '可管理全站帖子：修改、隐藏、恢复、状态切换、删除' : '可管理你发布的帖子：修改、隐藏、恢复、状态切换、删除'}}</view>
+  <view class="page-wrap {{bulkMode ? 'bulk-mode' : ''}}">
+    <view class="header-row">
+      <view class="header-title">Manage—
+Posts</view>
+      <view class="bulk-toggle" bindtap="toggleBulkMode">{{bulkMode ? 'Cancel' : 'Select'}}</view>
     </view>
 
-    <view class="card tabs">
-      <view class="tab {{activeTab === 'item' ? 'active' : ''}}" data-tab="item" bindtap="switchTab">出借帖子（{{manageItems.length}}）</view>
-      <view class="tab {{activeTab === 'demand' ? 'active' : ''}}" data-tab="demand" bindtap="switchTab">求借帖子（{{manageDemands.length}}）</view>
+    <view class="tip-text">{{isAdmin ? '管理员：可管理全站帖子' : '仅管理你发布的帖子'}}</view>
+
+    <view class="tab-nav">
+      <view class="tab-item {{activeTab === 'item' ? 'active' : ''}}" data-tab="item" bindtap="switchTab">出借帖子</view>
+      <view class="tab-item {{activeTab === 'demand' ? 'active' : ''}}" data-tab="demand" bindtap="switchTab">求借帖子</view>
     </view>
 
-    <view wx:if="{{loading}}" class="card empty">加载中...</view>
+    <view wx:if="{{loading}}" class="empty-card">加载中...</view>
 
-    <block wx:if="{{!loading && activeTab === 'item'}}">
-      <view wx:if="{{manageItems.length === 0}}" class="card empty">暂无出借帖子</view>
-      <view wx:for="{{manageItems}}" wx:key="id" class="card manage-item">
-        <view class="manage-head">
-          <view class="manage-name">{{item.title}}</view>
-          <view class="manage-status {{item.isHidden ? 'hidden' : ''}}">{{item.isHidden ? '已隐藏' : item.status}}</view>
-        </view>
-        <view class="manage-meta">{{item.owner}} · {{item.category}} · {{item.location}}</view>
-        <view class="manage-meta">租金 ¥{{item.price}}/天 · 押金 ¥{{item.deposit}}</view>
-        <view wx:if="{{item.isHidden && item.hiddenReason}}" class="manage-reason">隐藏原因：{{item.hiddenReason}}</view>
-        <button class="manage-btn" size="mini" data-id="{{item.id}}" bindtap="handleItemAction">管理此帖</button>
-      </view>
-    </block>
+    <view wx:if="{{!loading && activeTab === 'item'}}" class="post-list">
+      <view wx:if="{{manageItems.length === 0}}" class="empty-card">暂无出借帖子</view>
 
-    <block wx:if="{{!loading && activeTab === 'demand'}}">
-      <view wx:if="{{manageDemands.length === 0}}" class="card empty">暂无求借帖子</view>
-      <view wx:for="{{manageDemands}}" wx:key="id" class="card manage-item">
-        <view class="manage-head">
-          <view class="manage-name">{{item.title}}</view>
-          <view class="manage-status {{item.isHidden ? 'hidden' : ''}}">{{item.isHidden ? '已隐藏' : item.status}}</view>
+      <view
+        wx:for="{{manageItems}}"
+        wx:key="id"
+        class="post-card"
+        data-id="{{item.id}}"
+        bindtap="onItemCardTap"
+      >
+        <view class="bulk-checkbox {{item._selected ? 'checked' : ''}}" catchtap="toggleItemSelect" data-id="{{item.id}}"></view>
+
+        <view class="post-details">
+          <view class="post-header">
+            <view class="post-title">{{item.title}}</view>
+            <view class="status-badge {{item.statusClass}}">{{item.statusText}}</view>
+          </view>
+
+          <view class="post-meta">
+            <text>{{item.category}}</text>
+            <text>{{item.dateText}}</text>
+          </view>
+
+          <view wx:if="{{item.isHidden && item.hiddenReason}}" class="post-reason">隐藏原因：{{item.hiddenReason}}</view>
+
+          <view wx:if="{{!bulkMode}}" class="post-actions">
+            <view class="action-icon" catchtap="editItemTitle" data-id="{{item.id}}">✎</view>
+            <view class="action-icon" catchtap="toggleItemStatus" data-id="{{item.id}}">Ⅱ</view>
+            <view class="action-icon danger" catchtap="deleteItem" data-id="{{item.id}}">✕</view>
+          </view>
         </view>
-        <view class="manage-meta">{{item.publisher}} · {{item.category}} · {{item.location}}</view>
-        <view class="manage-meta">预算 ¥{{item.budget}} · 感谢方式：{{item.reward}}</view>
-        <view wx:if="{{item.isHidden && item.hiddenReason}}" class="manage-reason">隐藏原因：{{item.hiddenReason}}</view>
-        <button class="manage-btn" size="mini" data-id="{{item.id}}" bindtap="handleDemandAction">管理此帖</button>
       </view>
-    </block>
+    </view>
+
+    <view wx:if="{{!loading && activeTab === 'demand'}}" class="post-list">
+      <view wx:if="{{manageDemands.length === 0}}" class="empty-card">暂无求借帖子</view>
+
+      <view
+        wx:for="{{manageDemands}}"
+        wx:key="id"
+        class="post-card"
+        data-id="{{item.id}}"
+        bindtap="onDemandCardTap"
+      >
+        <view class="bulk-checkbox {{item._selected ? 'checked' : ''}}" catchtap="toggleDemandSelect" data-id="{{item.id}}"></view>
+
+        <view class="post-details">
+          <view class="post-header">
+            <view class="post-title">{{item.title}}</view>
+            <view class="status-badge {{item.statusClass}}">{{item.statusText}}</view>
+          </view>
+
+          <view class="post-meta">
+            <text>{{item.category}}</text>
+            <text>{{item.dateText}}</text>
+          </view>
+
+          <view wx:if="{{item.isHidden && item.hiddenReason}}" class="post-reason">隐藏原因：{{item.hiddenReason}}</view>
+
+          <view wx:if="{{!bulkMode}}" class="post-actions">
+            <view class="action-icon" catchtap="editDemandTitle" data-id="{{item.id}}">✎</view>
+            <view class="action-icon" catchtap="toggleDemandStatus" data-id="{{item.id}}">Ⅱ</view>
+            <view class="action-icon danger" catchtap="deleteDemand" data-id="{{item.id}}">✕</view>
+          </view>
+        </view>
+      </view>
+    </view>
   </view>
 </scroll-view>
+
+<view wx:if="{{bulkMode}}" class="bottom-bar">
+  <button class="bulk-actions-btn" bindtap="handleBulkAction">批量操作（{{bulkCount}}）</button>
+</view>

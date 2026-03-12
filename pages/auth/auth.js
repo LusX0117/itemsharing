@@ -37,6 +37,17 @@ Page({
     });
   },
 
+  goBack() {
+    wx.navigateBack();
+  },
+
+  forgotPassword() {
+    wx.showToast({
+      title: '请联系管理员重置密码',
+      icon: 'none'
+    });
+  },
+
   submit() {
     if (this.data.mode === 'login') {
       this.login();

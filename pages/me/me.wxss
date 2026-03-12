@@ -1,8 +1,7 @@
 page {
   height: 100vh;
-  background:
-    radial-gradient(circle at top right, #eaf7f4 0%, rgba(234, 247, 244, 0) 40%),
-    linear-gradient(180deg, #f9fbf8 0%, #f4f7f3 100%);
+  background: #e3e3e5;
+  color: #1c1c1e;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -13,115 +12,183 @@ page {
   min-height: 0;
 }
 
-.page {
-  padding: 24rpx 24rpx calc(170rpx + env(safe-area-inset-bottom));
+.page-wrap {
+  padding: 24rpx 24rpx calc(320rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
-.card {
-  background: var(--surface);
-  border-radius: 24rpx;
-  padding: 24rpx;
-  margin-bottom: 16rpx;
-  border: 1rpx solid var(--line);
-  box-shadow: 0 10rpx 28rpx rgba(15, 23, 42, 0.05);
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20rpx;
+  padding: 0 8rpx;
 }
 
-.profile-row {
+.header-title {
+  white-space: pre-line;
+  font-size: 54rpx;
+  line-height: 1.08;
+  font-weight: 700;
+  letter-spacing: -1rpx;
+}
+
+.close-btn {
+  font-size: 44rpx;
+  color: #8e8e93;
+  line-height: 1;
+  padding: 8rpx;
+}
+
+.profile-card {
+  background: #ffffff;
+  border-radius: 28rpx;
+  padding: 30rpx;
+  margin-bottom: 18rpx;
+  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.04);
+}
+
+.user-info {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 18rpx;
 }
 
 .avatar {
-  width: 84rpx;
-  height: 84rpx;
-  border-radius: 50%;
-  background: var(--brand-weak);
-  color: #0f766e;
-  font-size: 34rpx;
+  width: 110rpx;
+  height: 110rpx;
+  border-radius: 55rpx;
+  background: #edf0f4;
+  color: #6b7280;
+  font-size: 40rpx;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
-.profile-content {
+.user-meta {
   flex: 1;
   min-width: 0;
-}
-
-.name {
-  font-size: 34rpx;
-  font-weight: 700;
-  color: #0f172a;
 }
 
 .name-row {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: 10rpx;
+}
+
+.user-name {
+  font-size: 33rpx;
+  font-weight: 700;
+  color: #1c1c1e;
 }
 
 .role-tag {
   font-size: 20rpx;
-  padding: 6rpx 12rpx;
+  line-height: 1;
+  padding: 6rpx 10rpx;
   border-radius: 999rpx;
-  background: #dff3ee;
-  color: #0f766e;
+  background: #111111;
+  color: #ffffff;
 }
 
-.meta {
-  margin-top: 8rpx;
-  color: var(--muted);
-  font-size: 24rpx;
+.user-id {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #8e8e93;
 }
 
-.stats {
+.stats-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12rpx;
+  gap: 14rpx;
+  border-top: 1rpx solid #f0f0f2;
+  margin-top: 22rpx;
+  padding-top: 20rpx;
 }
 
-.stat {
-  margin-bottom: 0;
-  text-align: center;
-  padding-top: 18rpx;
-  padding-bottom: 18rpx;
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
 }
 
-.value {
-  font-size: 36rpx;
+.stat-value {
   font-weight: 700;
-  color: var(--brand);
+  font-size: 34rpx;
+  color: #1c1c1e;
 }
 
-.label {
-  margin-top: 8rpx;
-  color: var(--muted);
+.stat-label {
+  font-size: 20rpx;
+  color: #8e8e93;
+  letter-spacing: 0.3rpx;
+}
+
+.menu-card {
+  background: #ffffff;
+  border-radius: 28rpx;
+  overflow: hidden;
+  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.04);
+}
+
+.menu-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 30rpx;
+  border-bottom: 1rpx solid #f0f0f2;
+}
+
+.menu-row:last-child {
+  border-bottom: none;
+}
+
+.menu-label {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #1c1c1e;
+}
+
+.menu-arrow {
+  color: #8e8e93;
   font-size: 22rpx;
 }
 
-.actions button {
-  margin-top: 12rpx;
+.bottom-action {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(170rpx + env(safe-area-inset-bottom));
+  padding: 0 24rpx;
+  z-index: 20;
 }
 
-.auth-btn {
-  background: var(--brand) !important;
-  color: #ffffff !important;
+.btn-logout,
+.btn-login {
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  border-radius: 999rpx !important;
+  font-size: 30rpx !important;
+  font-weight: 600;
 }
 
-.msg-btn {
-  background: #b45309 !important;
-  color: #ffffff !important;
+.btn-logout {
+  background: rgba(255, 255, 255, 0.7) !important;
+  color: #ff3b30 !important;
+  border: 0 !important;
 }
 
-.manage-btn {
-  background: #0369a1 !important;
+.btn-login {
+  background: #111111 !important;
   color: #ffffff !important;
+  border: 0 !important;
 }
 
-.logout-btn {
-  background: #64748b !important;
-  color: #ffffff !important;
+.btn-logout::after,
+.btn-login::after {
+  border: 0;
 }
