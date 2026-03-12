@@ -330,6 +330,12 @@ const throwIfError = (error, fallback = 'db_error') => {
   }
 };
 
+const isMissingPhotosColumnError = (error) => {
+  const code = String((error && error.code) || '').trim();
+  const message = String((error && error.message) || '').toLowerCase();
+  return code === '42703' && message.includes('photos');
+};
+
 const mapUser = (row) => ({
   id: row.id,
   phone: row.phone,
@@ -859,7 +865,11 @@ app.post('/api/posts/item', asyncHandler(async (req, res) => {
     updated_at: now
   };
 
-  const inserted = await supabase.from('item_posts').insert(payload).select('*').single();
+  let inserted = await supabase.from('item_posts').insert(payload).select('*').single();
+  if (inserted.error && isMissingPhotosColumnError(inserted.error)) {
+    const { photos: _ignoredPhotos, ...legacyPayload } = payload;
+    inserted = await supabase.from('item_posts').insert(legacyPayload).select('*').single();
+  }
   throwIfError(inserted.error, 'item_create_failed');
 
   res.json({ item: mapItemPost(inserted.data) });
@@ -949,7 +959,11 @@ app.patch('/api/posts/item/:id', asyncHandler(async (req, res) => {
     patch.hidden_reason = '';
   }
 
-  const updated = await supabase.from('item_posts').update(patch).eq('id', id).select('*').single();
+  let updated = await supabase.from('item_posts').update(patch).eq('id', id).select('*').single();
+  if (updated.error && isMissingPhotosColumnError(updated.error)) {
+    const { photos: _ignoredPhotos, ...legacyPatch } = patch;
+    updated = await supabase.from('item_posts').update(legacyPatch).eq('id', id).select('*').single();
+  }
   throwIfError(updated.error, 'item_update_failed');
 
   res.json({ item: mapItemPost(updated.data) });

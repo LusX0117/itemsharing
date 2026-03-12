@@ -7,6 +7,8 @@
     "pages/me/me",
     "pages/post-manage/post-manage",
     "pages/auth/auth",
+    "pages/chat-item/chat-item",
+    "pages/chat-rating/chat-rating",
     "pages/chat/chat"
   ],
   "tabBar": {
