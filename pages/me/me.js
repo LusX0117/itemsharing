@@ -1,6 +1,18 @@
 const { getCurrentUser, clearCurrentUser } = require('../../utils/db');
 const { getChatSessions } = require('../../utils/chat-api');
 const { getHomePosts, getManagePosts } = require('../../utils/post-api');
+const TAB_INDEX = 4;
+
+const syncTabBarSelected = (page, index) => {
+  if (!page || typeof page.getTabBar !== 'function') {
+    return;
+  }
+  const tabBar = page.getTabBar();
+  if (!tabBar || typeof tabBar.setSelected !== 'function') {
+    return;
+  }
+  tabBar.setSelected(index);
+};
 
 Page({
   data: {
@@ -15,6 +27,7 @@ Page({
   },
 
   async onShow() {
+    syncTabBarSelected(this, TAB_INDEX);
     this.refreshCurrentUser();
     await this.loadDashboard();
   },

@@ -2,6 +2,29 @@ const categoryOptions = ['全部', '教材', '电子产品', '运动器材', '�
 const { getCurrentUser } = require('../../utils/db');
 const { startChatSession } = require('../../utils/chat-api');
 const { getHomePosts } = require('../../utils/post-api');
+const TAB_INDEX = 1;
+
+const syncTabBarSelected = (page, index) => {
+  if (!page || typeof page.getTabBar !== 'function') {
+    return;
+  }
+  const tabBar = page.getTabBar();
+  if (!tabBar || typeof tabBar.setSelected !== 'function') {
+    return;
+  }
+  tabBar.setSelected(index);
+};
+
+const resolveItemIcon = (category) => {
+  const text = String(category || '');
+  if (text.includes('教材')) return '📘';
+  if (text.includes('电子')) return '🔌';
+  if (text.includes('运动')) return '🏸';
+  if (text.includes('生活')) return '🧺';
+  return '📦';
+};
+
+const normalizeText = (value) => String(value || '').toLowerCase();
 
 Page({
   data: {
@@ -14,6 +37,7 @@ Page({
   },
 
   onShow() {
+    syncTabBarSelected(this, TAB_INDEX);
     this.refreshCurrentUser();
     this.loadItems();
   },
@@ -27,7 +51,12 @@ Page({
   async loadItems() {
     try {
       const resp = await getHomePosts();
-      this.setData({ items: resp.items || [] }, () => {
+      this.setData({
+        items: (resp.items || []).map((item) => ({
+          ...item,
+          icon: resolveItemIcon(item.category)
+        }))
+      }, () => {
         this.filterItems();
       });
     } catch (err) {
@@ -53,6 +82,21 @@ Page({
     this.filterItems();
   },
 
+  clearKeyword() {
+    this.setData({
+      keyword: ''
+    });
+    this.filterItems();
+  },
+
+  clearFilters() {
+    this.setData({
+      keyword: '',
+      activeCategory: '全部'
+    });
+    this.filterItems();
+  },
+
   filterItems() {
     const { items, keyword, activeCategory } = this.data;
     const q = keyword.trim().toLowerCase();
@@ -60,9 +104,9 @@ Page({
       const byCategory = activeCategory === '全部' || item.category === activeCategory;
       const byKeyword =
         !q ||
-        item.title.toLowerCase().includes(q) ||
-        item.description.toLowerCase().includes(q) ||
-        item.location.toLowerCase().includes(q);
+        normalizeText(item.title).includes(q) ||
+        normalizeText(item.description).includes(q) ||
+        normalizeText(item.location).includes(q);
       return byCategory && byKeyword;
     });
     this.setData({ filteredItems });

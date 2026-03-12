@@ -2,13 +2,13 @@ const { API_BASE_URL } = require('./api-config');
 const { getAuthHeaders } = require('./db');
 const POST_BASE_URL = API_BASE_URL;
 
-const request = ({ url, method = 'GET', data }) => new Promise((resolve, reject) => {
+const request = ({ url, method = 'GET', data, timeout = 10000 }) => new Promise((resolve, reject) => {
   wx.request({
     url: `${POST_BASE_URL}${url}`,
     method,
     data,
     header: getAuthHeaders(),
-    timeout: 10000,
+    timeout,
     success: (res) => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         resolve(res.data || {});
@@ -38,6 +38,13 @@ const createDemandPost = (payload) => request({
   url: '/api/posts/demand',
   method: 'POST',
   data: payload
+});
+
+const uploadItemPhoto = (payload) => request({
+  url: '/api/uploads/item-photo',
+  method: 'POST',
+  data: payload,
+  timeout: 30000
 });
 
 const updateItemPost = (id, payload) => request({
@@ -70,6 +77,7 @@ module.exports = {
   getManagePosts,
   createItemPost,
   createDemandPost,
+  uploadItemPhoto,
   updateItemPost,
   updateDemandPost,
   deleteItemPost,

@@ -1,40 +1,51 @@
-<navigation-bar title="主页" back="{{false}}" color="black" background="#f8fbff"></navigation-bar>
+<navigation-bar title="主页" back="{{false}}" color="black" background="#e3e3e5"></navigation-bar>
 
 <scroll-view class="scrollarea" scroll-y enhanced enable-flex show-scrollbar="false">
-  <view class="page">
-    <view class="section-title">物品列表</view>
-    <view wx:if="{{items.length === 0}}" class="empty card">暂无可出借物品</view>
-    <view wx:for="{{items}}" wx:key="id" class="card item-card">
-      <view class="item-header">
-        <view>
-          <view class="item-title">{{item.title}}</view>
-          <view class="item-owner">{{item.owner}}</view>
+  <view class="page-wrap">
+    <view class="hero-header">
+      <view class="hero-title">Share—
+Network</view>
+      <view class="profile-trigger" bindtap="goMe">{{userInitial}}</view>
+    </view>
+
+    <view class="tab-switch">
+      <view class="tab-item {{activeTab === 'available' ? 'active' : ''}}" data-tab="available" bindtap="switchTab">可借物品</view>
+      <view class="tab-item {{activeTab === 'requests' ? 'active' : ''}}" data-tab="requests" bindtap="switchTab">求借信息</view>
+    </view>
+
+    <view class="feed-list" wx:if="{{activeTab === 'available'}}">
+      <view wx:if="{{items.length === 0}}" class="empty-card">暂无可出借物品</view>
+
+      <view wx:for="{{items}}" wx:key="id" class="feed-card item-card">
+        <view class="card-thumb">
+          <image wx:if="{{item.photos && item.photos.length}}" class="card-thumb-image" src="{{item.photos[0]}}" mode="aspectFill" />
+          <text wx:else>{{item.icon}}</text>
         </view>
-        <view class="badge">{{item.status}}</view>
-      </view>
-      <view class="item-description">{{item.description}}</view>
-      <view class="item-tags">
-        <text class="tag">{{item.category}}</text>
-        <text class="tag">{{item.location}}</text>
-      </view>
-      <view class="item-footer">
-        <view class="item-price">租金 ¥{{item.price}}/天 · 押金 ¥{{item.deposit}}</view>
-        <button class="action-btn" size="mini" data-id="{{item.id}}" bindtap="applyBorrow">申请借用</button>
+        <view class="card-main">
+          <view class="card-category">{{item.category}}</view>
+          <view class="card-title">{{item.title}}</view>
+          <view class="card-meta">{{item.owner}} · {{item.location}}</view>
+          <view class="card-price">¥{{item.price}}/天 · 押金 ¥{{item.deposit}}</view>
+        </view>
+        <button class="card-action" size="mini" data-id="{{item.id}}" bindtap="applyBorrow">申请借用</button>
       </view>
     </view>
 
-    <view class="section-title">求借列表</view>
-    <view wx:if="{{demands.length === 0}}" class="empty card">暂无求借信息</view>
-    <view wx:for="{{demands}}" wx:key="id" class="card demand-card">
-      <view class="demand-title">{{item.title}}</view>
-      <view class="demand-meta">{{item.publisher}} · {{item.location}}</view>
-      <view class="demand-meta">预算：¥{{item.budget}} · 分类：{{item.category}}</view>
-      <view class="demand-reward">{{item.reward}}</view>
-      <view class="demand-desc">{{item.description}}</view>
-      <view class="demand-footer">
-        <view class="demand-state">状态：{{item.status}}</view>
-        <button class="lend-btn" size="mini" data-id="{{item.id}}" bindtap="lendToDemand">我要借出</button>
+    <view class="feed-list" wx:elif="{{activeTab === 'requests'}}">
+      <view wx:if="{{demands.length === 0}}" class="empty-card">暂无求借信息</view>
+
+      <view wx:for="{{demands}}" wx:key="id" class="feed-card demand-card">
+        <view class="card-thumb">{{item.icon}}</view>
+        <view class="card-main">
+          <view class="card-category">{{item.category}}</view>
+          <view class="card-title">{{item.title}}</view>
+          <view class="card-meta">{{item.publisher}} · {{item.location}}</view>
+          <view class="card-price">预算 ¥{{item.budget}} · {{item.reward}}</view>
+        </view>
+        <button class="card-action demand" size="mini" data-id="{{item.id}}" bindtap="lendToDemand">我要借出</button>
       </view>
     </view>
   </view>
 </scroll-view>
+
+<view class="fab" bindtap="goPublish">＋</view>

@@ -10,6 +10,7 @@
     "pages/chat/chat"
   ],
   "tabBar": {
+    "custom": true,
     "color": "#6b7280",
     "selectedColor": "#0f766e",
     "backgroundColor": "#fbfcf8",

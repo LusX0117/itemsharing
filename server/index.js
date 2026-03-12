@@ -9,6 +9,8 @@ const app = express();
 const PORT = Number(process.env.PORT || 3007);
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_STORAGE_BUCKET = String(process.env.SUPABASE_STORAGE_BUCKET || 'post-images').trim() || 'post-images';
+const STORAGE_MAX_IMAGE_BYTES = Number(process.env.STORAGE_MAX_IMAGE_BYTES || 3 * 1024 * 1024);
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error('请在 server/.env 中配置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY。');
@@ -138,6 +140,57 @@ const toNumber = (value) => {
 };
 
 const genId = (prefix) => `${prefix}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+let isStorageBucketEnsured = false;
+
+const normalizeImageMime = (mimeType) => {
+  const mime = String(mimeType || '').trim().toLowerCase();
+  if (mime === 'image/png') return 'image/png';
+  if (mime === 'image/webp') return 'image/webp';
+  return 'image/jpeg';
+};
+
+const getImageExtByMime = (mimeType) => {
+  if (mimeType === 'image/png') return 'png';
+  if (mimeType === 'image/webp') return 'webp';
+  return 'jpg';
+};
+
+const parseBase64Image = (base64Text) => {
+  const raw = String(base64Text || '').trim();
+  if (!raw) {
+    return null;
+  }
+  const payload = raw.includes(',') ? raw.split(',').pop() : raw;
+  try {
+    const buffer = Buffer.from(payload, 'base64');
+    if (!buffer.length) {
+      return null;
+    }
+    return buffer;
+  } catch (err) {
+    return null;
+  }
+};
+
+const ensureStorageBucket = async () => {
+  if (isStorageBucketEnsured) {
+    return;
+  }
+  const listResp = await supabase.storage.listBuckets();
+  throwIfError(listResp.error, 'storage_bucket_list_failed');
+  const exists = (listResp.data || []).some((bucket) => String(bucket.id || bucket.name) === SUPABASE_STORAGE_BUCKET);
+  if (!exists) {
+    const sizeMb = Math.max(1, Math.ceil(STORAGE_MAX_IMAGE_BYTES / (1024 * 1024)));
+    const createResp = await supabase.storage.createBucket(SUPABASE_STORAGE_BUCKET, {
+      public: true,
+      fileSizeLimit: `${sizeMb}MB`
+    });
+    if (createResp.error && !String(createResp.error.message || '').includes('already exists')) {
+      throwIfError(createResp.error, 'storage_bucket_create_failed');
+    }
+  }
+  isStorageBucketEnsured = true;
+};
 
 const AUTH_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const AUTH_RATE_LIMIT_MAX_PER_IP = Number(process.env.AUTH_RATE_LIMIT_MAX_PER_IP || 80);
@@ -294,6 +347,7 @@ const mapItemPost = (row) => ({
   deposit: toNumber(row.deposit),
   location: row.location,
   description: row.description,
+  photos: parseJsonArray(row.photos),
   status: row.status,
   isHidden: Boolean(row.is_hidden),
   hiddenReason: row.hidden_reason || '',
@@ -720,6 +774,52 @@ app.get('/api/posts/manage', asyncHandler(async (req, res) => {
   });
 }));
 
+app.post('/api/uploads/item-photo', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
+
+  const { fileBase64, mimeType } = req.body || {};
+  const imageBuffer = parseBase64Image(fileBase64);
+  if (!imageBuffer) {
+    res.status(400).json({ error: 'invalid_image_data' });
+    return;
+  }
+  if (imageBuffer.length > STORAGE_MAX_IMAGE_BYTES) {
+    res.status(400).json({ error: 'image_too_large' });
+    return;
+  }
+
+  await ensureStorageBucket();
+
+  const safeMimeType = normalizeImageMime(mimeType);
+  const ext = getImageExtByMime(safeMimeType);
+  const filePath = `items/${String(authUser.id)}/${Date.now()}_${Math.floor(Math.random() * 100000)}.${ext}`;
+  const uploadResp = await supabase.storage
+    .from(SUPABASE_STORAGE_BUCKET)
+    .upload(filePath, imageBuffer, {
+      contentType: safeMimeType,
+      upsert: false,
+      cacheControl: '3600'
+    });
+  throwIfError(uploadResp.error, 'storage_upload_failed');
+
+  const publicResp = supabase.storage
+    .from(SUPABASE_STORAGE_BUCKET)
+    .getPublicUrl(filePath);
+  const publicUrl = publicResp && publicResp.data && publicResp.data.publicUrl ? String(publicResp.data.publicUrl) : '';
+  if (!publicUrl) {
+    res.status(500).json({ error: 'storage_public_url_failed' });
+    return;
+  }
+
+  res.json({
+    url: publicUrl,
+    path: filePath
+  });
+}));
+
 app.post('/api/posts/item', asyncHandler(async (req, res) => {
   const authUser = await requireAuthUser(req, res);
   if (!authUser) {
@@ -731,7 +831,8 @@ app.post('/api/posts/item', asyncHandler(async (req, res) => {
     price,
     deposit,
     location,
-    description
+    description,
+    photos
   } = req.body || {};
 
   if (!title || !category || location === undefined) {
@@ -740,6 +841,7 @@ app.post('/api/posts/item', asyncHandler(async (req, res) => {
   }
 
   const now = Date.now();
+  const photoList = Array.isArray(photos) ? photos.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 3) : [];
   const payload = {
     title: String(title).trim(),
     owner_user_id: String(authUser.id),
@@ -749,6 +851,7 @@ app.post('/api/posts/item', asyncHandler(async (req, res) => {
     deposit: toNumber(deposit),
     location: String(location).trim(),
     description: String(description || '').trim() || '暂无描述',
+    photos: photoList,
     status: '可借',
     is_hidden: false,
     hidden_reason: '',
@@ -811,7 +914,7 @@ app.patch('/api/posts/item/:id', asyncHandler(async (req, res) => {
     return;
   }
   const id = toNumber(req.params && req.params.id);
-  const { title, category, price, deposit, location, description, status, isHidden, hiddenReason } = req.body || {};
+  const { title, category, price, deposit, location, description, photos, status, isHidden, hiddenReason } = req.body || {};
 
   if (!id) {
     res.status(400).json({ error: 'missing_required_fields' });
@@ -834,6 +937,11 @@ app.patch('/api/posts/item/:id', asyncHandler(async (req, res) => {
   if (deposit !== undefined) patch.deposit = toNumber(deposit);
   if (location !== undefined) patch.location = String(location).trim();
   if (description !== undefined) patch.description = String(description).trim() || '暂无描述';
+  if (photos !== undefined) {
+    patch.photos = Array.isArray(photos)
+      ? photos.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 3)
+      : [];
+  }
   if (status !== undefined) patch.status = String(status);
   if (isHidden !== undefined) patch.is_hidden = Boolean(isHidden);
   if (hiddenReason !== undefined) patch.hidden_reason = String(hiddenReason || '').trim();
