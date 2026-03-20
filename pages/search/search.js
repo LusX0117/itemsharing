@@ -2,7 +2,9 @@ const categoryOptions = ['全部', '教材', '电子产品', '运动器材', '�
 const { getCurrentUser } = require('../../utils/db');
 const { startChatSession } = require('../../utils/chat-api');
 const { getHomePosts } = require('../../utils/post-api');
+const { consumeAuthExpired } = require('../../utils/auth-guard');
 const TAB_INDEX = 1;
+const BORROWING_STATUSES = ['借用中', '待确认归还'];
 
 const syncTabBarSelected = (page, index) => {
   if (!page || typeof page.getTabBar !== 'function') {
@@ -25,6 +27,18 @@ const resolveItemIcon = (category) => {
 };
 
 const normalizeText = (value) => String(value || '').toLowerCase();
+
+const buildItemCard = (item) => {
+  const statusText = String(item.status || '可借');
+  const isBorrowing = BORROWING_STATUSES.includes(statusText);
+  return {
+    ...item,
+    icon: resolveItemIcon(item.category),
+    isBorrowing,
+    statusText,
+    borrowBtnText: isBorrowing ? '出借中' : '借用'
+  };
+};
 
 Page({
   data: {
@@ -52,10 +66,7 @@ Page({
     try {
       const resp = await getHomePosts();
       this.setData({
-        items: (resp.items || []).map((item) => ({
-          ...item,
-          icon: resolveItemIcon(item.category)
-        }))
+        items: (resp.items || []).map(buildItemCard)
       }, () => {
         this.filterItems();
       });
@@ -132,6 +143,11 @@ Page({
       return;
     }
 
+    if (selectedItem.isBorrowing) {
+      wx.showToast({ title: '该物品正在出借中', icon: 'none' });
+      return;
+    }
+
     const lenderUserId = selectedItem.ownerUserId || `legacy_${selectedItem.owner}`;
     if (String(lenderUserId) === String(currentUser.id)) {
       wx.showToast({ title: '不能借用自己发布的物品', icon: 'none' });
@@ -157,6 +173,23 @@ Page({
         url: `/pages/chat/chat?sessionId=${session.id}`
       });
     } catch (err) {
+      if (consumeAuthExpired(err, {
+        onClear: () => {
+          this.setData({
+            currentUser: null
+          });
+        }
+      })) {
+        return;
+      }
+      if (String((err && err.message) || '').includes('item_unavailable')) {
+        wx.showToast({
+          title: '该物品正在出借中',
+          icon: 'none'
+        });
+        this.loadItems();
+        return;
+      }
       wx.showToast({
         title: '聊天服务不可用，请稍后重试',
         icon: 'none'

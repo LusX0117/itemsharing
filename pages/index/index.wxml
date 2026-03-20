@@ -24,9 +24,10 @@
           <view class="card-category">{{item.category}}</view>
           <view class="card-title">{{item.title}}</view>
           <view class="card-meta">{{item.owner}} · {{item.location}}</view>
+          <view class="card-status {{item.isBorrowing ? 'busy' : ''}}">{{item.isBorrowing ? '出借中' : item.statusText}}</view>
           <view class="card-price">¥{{item.price}}/天 · 押金 ¥{{item.deposit}}</view>
         </view>
-        <button class="card-action" size="mini" data-id="{{item.id}}" catchtap="applyBorrow">申请借用</button>
+        <button class="card-action {{item.isBorrowing ? 'disabled' : ''}}" size="mini" data-id="{{item.id}}" catchtap="applyBorrow" disabled="{{item.isBorrowing}}">{{item.borrowBtnText}}</button>
       </view>
     </view>
 

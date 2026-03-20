@@ -487,7 +487,58 @@ const loadSessionUnreadMap = async (userId, sessionIds = []) => {
   return unreadMap;
 };
 
+const BORROWING_ITEM_STATUSES = ['借用中', '待确认归还'];
+const FINAL_SESSION_STATUSES = ['已完成', '已拒绝', '已取消'];
+
 const isPendingBorrowApproval = (status) => ['待出借者同意', '借用协商中'].includes(String(status || ''));
+const isItemBorrowingStatus = (status) => BORROWING_ITEM_STATUSES.includes(String(status || ''));
+
+const syncItemPostStatusBySession = async (sessionRow, nextSessionStatus, nowTs = Date.now()) => {
+  const itemId = toNumber(sessionRow && sessionRow.item_id);
+  if (!itemId) {
+    return;
+  }
+
+  const itemResp = await supabase
+    .from('item_posts')
+    .select('id, status')
+    .eq('id', itemId)
+    .maybeSingle();
+  throwIfError(itemResp.error, 'item_query_failed');
+  if (!itemResp.data) {
+    return;
+  }
+
+  const nextSessionText = String(nextSessionStatus || '');
+  let nextItemStatus = '';
+  if (isItemBorrowingStatus(nextSessionText)) {
+    nextItemStatus = '借用中';
+  } else if (FINAL_SESSION_STATUSES.includes(nextSessionText)) {
+    const activeResp = await supabase
+      .from('chat_sessions')
+      .select('id')
+      .eq('item_id', itemId)
+      .in('status', BORROWING_ITEM_STATUSES)
+      .limit(1);
+    throwIfError(activeResp.error, 'item_active_session_query_failed');
+    nextItemStatus = (activeResp.data || []).length ? '借用中' : '可借';
+  } else {
+    return;
+  }
+
+  if (String(itemResp.data.status || '') === nextItemStatus) {
+    return;
+  }
+
+  const updateResp = await supabase
+    .from('item_posts')
+    .update({
+      status: nextItemStatus,
+      updated_at: nowTs
+    })
+    .eq('id', itemId);
+  throwIfError(updateResp.error, 'item_status_sync_failed');
+};
 
 const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -1077,6 +1128,11 @@ app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
   }
   const lenderId = String(lenderUserId);
   const borrowerId = String(borrowerUserId);
+  const numericItemId = toNumber(itemId);
+  if (!numericItemId) {
+    res.status(400).json({ error: 'missing_required_fields' });
+    return;
+  }
   const authUserId = String(authUser.id);
   if (authUserId !== lenderId && authUserId !== borrowerId) {
     res.status(403).json({ error: 'forbidden_actor' });
@@ -1092,7 +1148,7 @@ app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
   const existingResp = await supabase
     .from('chat_sessions')
     .select('*')
-    .eq('item_id', toNumber(itemId))
+    .eq('item_id', numericItemId)
     .eq('lender_user_id', lenderId)
     .eq('borrower_user_id', borrowerId)
     .neq('status', '已完成')
@@ -1107,10 +1163,32 @@ app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
     return;
   }
 
+  const itemResp = await supabase
+    .from('item_posts')
+    .select('id, owner_user_id, status, is_hidden')
+    .eq('id', numericItemId)
+    .maybeSingle();
+  throwIfError(itemResp.error, 'item_query_failed');
+  const itemRow = itemResp.data;
+  if (itemRow) {
+    if (Boolean(itemRow.is_hidden)) {
+      res.status(409).json({ error: 'item_unavailable' });
+      return;
+    }
+    if (String(itemRow.owner_user_id) !== lenderId) {
+      res.status(409).json({ error: 'item_lender_mismatch' });
+      return;
+    }
+    if (isItemBorrowingStatus(itemRow.status)) {
+      res.status(409).json({ error: 'item_unavailable' });
+      return;
+    }
+  }
+
   const now = Date.now();
   const sessionPayload = {
     id: genId('session'),
-    item_id: toNumber(itemId),
+    item_id: numericItemId,
     item_title: String(itemTitle),
     lender_user_id: lenderId,
     lender_name: String(users[lenderId].nickname || ''),
@@ -1467,6 +1545,8 @@ app.patch('/api/chat/session/action', asyncHandler(async (req, res) => {
     .single();
   throwIfError(updatedResp.error, 'session_action_update_failed');
 
+  await syncItemPostStatusBySession(updatedResp.data, nextStatus, now);
+
   if (systemText) {
     const msgResp = await supabase.from('chat_messages').insert({
       session_id: String(sessionId),
@@ -1520,6 +1600,8 @@ app.patch('/api/chat/session/status', asyncHandler(async (req, res) => {
     res.status(404).json({ error: 'session_not_found' });
     return;
   }
+
+  await syncItemPostStatusBySession(updatedResp.data, String(status), Date.now());
 
   res.json({ session: mapSession(updatedResp.data) });
 }));

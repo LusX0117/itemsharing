@@ -2,7 +2,7 @@
 
 <view wx:if="{{loading}}" class="missing-page">聊天加载中...</view>
 
-<view wx:elif="{{session}}" class="chat-page">
+<view wx:elif="{{session}}" class="chat-page" style="padding-bottom: {{keyboardHeight}}px;">
   <view class="header-section">
     <view class="nav-bar">
       <view class="user-info">
@@ -47,7 +47,15 @@
   <view class="input-bar-container">
     <view class="input-wrapper">
       <view class="attach-btn" bindtap="handleAttachTap">＋</view>
-      <input class="chat-input" placeholder="输入消息..." value="{{messageText}}" bindinput="handleMessageInput" />
+      <input
+        class="chat-input"
+        placeholder="输入消息..."
+        value="{{messageText}}"
+        bindinput="handleMessageInput"
+        bindblur="handleInputBlur"
+        adjust-position="{{false}}"
+        cursor-spacing="16"
+      />
       <button class="send-btn" bindtap="sendMessage">↑</button>
     </view>
   </view>

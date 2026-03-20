@@ -1,6 +1,9 @@
 const { getCurrentUser } = require('../../utils/db');
 const { getChatSession, startChatSession } = require('../../utils/chat-api');
 const { getHomePosts } = require('../../utils/post-api');
+const { consumeAuthExpired } = require('../../utils/auth-guard');
+
+const BORROWING_STATUSES = ['借用中', '待确认归还'];
 
 const toArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -58,7 +61,8 @@ Page({
       ...session,
       itemDescription,
       displayImages,
-      chatEntryText
+      chatEntryText,
+      chatEntryDisabled: false
     };
   },
 
@@ -85,7 +89,10 @@ Page({
     const userId = currentUser ? String(currentUser.id) : '';
     const ownerUserId = String(item.ownerUserId || '');
     const isOwner = userId && ownerUserId && userId === ownerUserId;
-    const chatEntryText = isOwner ? '我要借出' : '申请借用';
+    const statusText = String(item.status || '可借');
+    const isBorrowing = BORROWING_STATUSES.includes(statusText);
+    const chatEntryDisabled = !isOwner && isBorrowing;
+    const chatEntryText = isOwner ? '我要借出' : (chatEntryDisabled ? '出借中' : '申请借用');
     const itemDescription = String(item.description || '').trim()
       || '发布者暂未填写描述，请在聊天中沟通借还细节。';
     const displayImages = dedupeUrls(toArray(item.photos));
@@ -96,9 +103,10 @@ Page({
       itemDescription,
       displayImages,
       chatEntryText,
+      chatEntryDisabled,
       ownerUserId,
       ownerName: String(item.owner || ''),
-      status: String(item.status || '可借')
+      status: statusText
     };
   },
 
@@ -199,6 +207,11 @@ Page({
       return;
     }
 
+    if (item.chatEntryDisabled) {
+      wx.showToast({ title: '该物品正在出借中', icon: 'none' });
+      return;
+    }
+
     try {
       const resp = await startChatSession({
         itemId: Number(item.itemId),
@@ -216,6 +229,14 @@ Page({
         url: `/pages/chat/chat?sessionId=${session.id}`
       });
     } catch (err) {
+      if (consumeAuthExpired(err)) {
+        return;
+      }
+      if (String((err && err.message) || '').includes('item_unavailable')) {
+        wx.showToast({ title: '该物品正在出借中', icon: 'none' });
+        this.refreshAll();
+        return;
+      }
       wx.showToast({ title: '进入聊天失败', icon: 'none' });
     }
   }

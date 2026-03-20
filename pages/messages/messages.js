@@ -1,5 +1,6 @@
 const { getCurrentUser } = require('../../utils/db');
 const { getChatSessions } = require('../../utils/chat-api');
+const { consumeAuthExpired } = require('../../utils/auth-guard');
 const TAB_INDEX = 3;
 
 const syncTabBarSelected = (page, index) => {
@@ -107,6 +108,19 @@ Page({
       });
       this.updateTabUnreadBadge(unreadTotal);
     } catch (err) {
+      if (consumeAuthExpired(err, {
+        onClear: () => {
+          this.setData({
+            currentUser: null,
+            sessions: [],
+            unreadTotal: 0,
+            unreadTotalText: '0'
+          });
+          this.updateTabUnreadBadge(0);
+        }
+      })) {
+        return;
+      }
       this.setData({ sessions: [], unreadTotal: 0, unreadTotalText: '0' });
       this.updateTabUnreadBadge(0);
       wx.showToast({ title: '聊天服务不可用', icon: 'none' });

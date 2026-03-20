@@ -49,10 +49,10 @@
         <view class="item-info">
           <view class="item-title">{{item.title}}</view>
           <view class="item-meta">{{item.category}} · {{item.location}}</view>
-          <view class="item-meta available">{{item.status || '可借'}}</view>
+          <view class="item-meta available {{item.isBorrowing ? 'busy' : ''}}">{{item.isBorrowing ? '出借中' : item.statusText}}</view>
           <view class="item-price">¥{{item.price}}/天 · 押金 ¥{{item.deposit}}</view>
         </view>
-        <button class="borrow-btn" size="mini" data-id="{{item.id}}" bindtap="applyBorrow">借用</button>
+        <button class="borrow-btn {{item.isBorrowing ? 'disabled' : ''}}" size="mini" data-id="{{item.id}}" bindtap="applyBorrow" disabled="{{item.isBorrowing}}">{{item.borrowBtnText}}</button>
       </view>
 
       <view wx:if="{{filteredItems.length === 0}}" class="empty-state">

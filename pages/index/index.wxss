@@ -32,8 +32,8 @@ page {
 }
 
 .profile-trigger {
-  width: 54px;
-  height: 54px;
+  width: 116rpx;
+  height: 116rpx;
   border-radius: 58rpx;
   background: #d1d1d6;
   color: #1c1c1e;
@@ -145,6 +145,23 @@ page {
   color: #8e8e93;
 }
 
+.card-status {
+  margin-top: 6rpx;
+  display: inline-flex;
+  align-items: center;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+  font-size: 20rpx;
+  font-weight: 600;
+}
+
+.card-status.busy {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+
 .card-action {
   position: absolute;
   right: 22rpx;
@@ -161,6 +178,11 @@ page {
 
 .card-action.demand {
   background: #111111 !important;
+}
+
+.card-action.disabled {
+  background: #9aa0aa !important;
+  color: rgba(255, 255, 255, 0.95) !important;
 }
 
 .card-action::after {

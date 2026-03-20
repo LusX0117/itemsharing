@@ -6,6 +6,7 @@
   <scroll-view class="content-scroll" scroll-y enhanced enable-flex show-scrollbar="false">
     <view class="content-wrap">
       <view class="item-title">{{session.itemTitle}}</view>
+      <view class="item-status {{session.status === '借用中' || session.status === '待确认归还' ? 'busy' : ''}}">{{session.status || '可借'}}</view>
 
       <view class="item-desc">{{session.itemDescription}}</view>
 
@@ -27,7 +28,7 @@
   </scroll-view>
 
   <view class="action-fab-wrap">
-    <button class="action-fab" bindtap="goChatPage">{{session.chatEntryText}}</button>
+    <button class="action-fab {{session.chatEntryDisabled ? 'disabled' : ''}}" bindtap="goChatPage" disabled="{{session.chatEntryDisabled}}">{{session.chatEntryText}}</button>
   </view>
 </view>
 

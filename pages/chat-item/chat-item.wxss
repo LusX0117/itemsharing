@@ -32,6 +32,23 @@ page {
   word-break: break-word;
 }
 
+.item-status {
+  margin-top: 10rpx;
+  display: inline-flex;
+  align-items: center;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.item-status.busy {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+
 .item-desc {
   margin-top: 14rpx;
   font-size: 26rpx;
@@ -90,6 +107,11 @@ page {
 
 .action-fab::after {
   border: 0;
+}
+
+.action-fab.disabled {
+  background: #9aa0aa !important;
+  color: rgba(255, 255, 255, 0.95) !important;
 }
 
 .missing-page {

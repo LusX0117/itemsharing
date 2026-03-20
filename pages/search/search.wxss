@@ -191,6 +191,10 @@ page {
   color: #16a34a;
 }
 
+.item-meta.available.busy {
+  color: #b45309;
+}
+
 .item-price {
   margin-top: 6rpx;
   font-size: 22rpx;
@@ -212,6 +216,11 @@ page {
 
 .borrow-btn::after {
   border: 0;
+}
+
+.borrow-btn.disabled {
+  background: #9aa0aa !important;
+  color: rgba(255, 255, 255, 0.95) !important;
 }
 
 .empty-state {

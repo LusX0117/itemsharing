@@ -6,6 +6,7 @@ const {
   markChatSessionRead,
   runChatSessionAction
 } = require('../../utils/chat-api');
+const { consumeAuthExpired } = require('../../utils/auth-guard');
 
 const POLL_INTERVAL_MS = 3000;
 const ORDER_STAGE_LABELS = ['已申请', '已同意', '借用中', '已归还'];
@@ -79,10 +80,12 @@ Page({
     messageText: '',
     lastMessageAnchor: '',
     lastReadMessageIdSent: 0,
+    keyboardHeight: 0,
     loading: true
   },
 
   pollTimer: null,
+  keyboardHeightListener: null,
   isPageAlive: false,
   isPageVisible: false,
 
@@ -110,6 +113,7 @@ Page({
     this.safeSetData({
       currentUser: getCurrentUser()
     });
+    this.bindKeyboardHeightListener();
     await this.refreshAll();
     this.startPolling();
   },
@@ -117,12 +121,42 @@ Page({
   onHide() {
     this.isPageVisible = false;
     this.stopPolling();
+    this.unbindKeyboardHeightListener();
+    this.safeSetData({
+      keyboardHeight: 0
+    }, { allowHidden: true });
   },
 
   onUnload() {
     this.isPageVisible = false;
     this.isPageAlive = false;
     this.stopPolling();
+    this.unbindKeyboardHeightListener();
+    this.safeSetData({
+      keyboardHeight: 0
+    }, { allowHidden: true });
+  },
+
+  bindKeyboardHeightListener() {
+    if (this.keyboardHeightListener || typeof wx.onKeyboardHeightChange !== 'function') {
+      return;
+    }
+    this.keyboardHeightListener = (res) => {
+      const nextHeight = Math.max(0, Number(res && res.height) || 0);
+      this.safeSetData({
+        keyboardHeight: nextHeight
+      }, { allowHidden: true });
+    };
+    wx.onKeyboardHeightChange(this.keyboardHeightListener);
+  },
+
+  unbindKeyboardHeightListener() {
+    if (!this.keyboardHeightListener || typeof wx.offKeyboardHeightChange !== 'function') {
+      this.keyboardHeightListener = null;
+      return;
+    }
+    wx.offKeyboardHeightChange(this.keyboardHeightListener);
+    this.keyboardHeightListener = null;
   },
 
   startPolling() {
@@ -218,6 +252,18 @@ Page({
       this.applySessionAndMessages(session, mappedMessages);
       await this.markSessionRead(mappedMessages);
     } catch (err) {
+      if (consumeAuthExpired(err, {
+        onClear: () => {
+          this.stopPolling();
+          this.safeSetData({
+            loading: false,
+            currentUser: null,
+            session: null
+          });
+        }
+      })) {
+        return;
+      }
       this.safeSetData({ loading: false });
       if (this.isPageVisible) {
         wx.showToast({ title: '聊天数据加载失败', icon: 'none' });
@@ -246,6 +292,13 @@ Page({
       this.applySessionAndMessages(latestSession, allMessages);
       await this.markSessionRead(allMessages);
     } catch (err) {
+      consumeAuthExpired(err, {
+        showToast: false,
+        redirect: false,
+        onClear: () => {
+          this.stopPolling();
+        }
+      });
       // polling failure should be silent to avoid toast spam
     }
   },
@@ -280,6 +333,12 @@ Page({
     });
   },
 
+  handleInputBlur() {
+    this.safeSetData({
+      keyboardHeight: 0
+    }, { allowHidden: true });
+  },
+
   async sendMessage() {
     const text = this.data.messageText.trim();
     if (!text) {
@@ -301,6 +360,9 @@ Page({
       this.safeSetData({ messageText: '' });
       await this.refreshAll();
     } catch (err) {
+      if (consumeAuthExpired(err)) {
+        return;
+      }
       if (this.isPageVisible) {
         wx.showToast({ title: '发送失败', icon: 'none' });
       }
@@ -359,6 +421,9 @@ Page({
       }
     } catch (err) {
       const msg = String((err && err.message) || '');
+      if (consumeAuthExpired(err)) {
+        return;
+      }
       if (msg.includes('invalid_status_transition')) {
         wx.showToast({ title: '状态已变化，请刷新后重试', icon: 'none' });
         await this.refreshAll();
