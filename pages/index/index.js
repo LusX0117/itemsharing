@@ -7,6 +7,8 @@ const DEMAND_SESSION_OFFSET = 8000000000000;
 const DEMAND_SESSION_MOD = 900000000000;
 const TAB_INDEX = 0;
 const BORROWING_STATUSES = ['借用中', '待确认归还'];
+const ITEM_PAGE_SIZE = 12;
+const DEMAND_PAGE_SIZE = 12;
 
 const syncTabBarSelected = (page, index) => {
   if (!page || typeof page.getTabBar !== 'function') {
@@ -58,13 +60,32 @@ const buildItemCard = (item) => {
   };
 };
 
+const mergeById = (current, incoming, key = 'id') => {
+  const idSet = new Set((current || []).map((item) => String(item[key])));
+  const append = (incoming || []).filter((item) => !idSet.has(String(item[key])));
+  return (current || []).concat(append);
+};
+
 Page({
   data: {
     currentUser: null,
     userInitial: '我',
     activeTab: 'available',
     items: [],
-    demands: []
+    demands: [],
+    itemPagination: {
+      nextOffset: 0,
+      hasMore: true,
+      totalCount: 0
+    },
+    demandPagination: {
+      nextOffset: 0,
+      hasMore: true,
+      totalCount: 0
+    },
+    loadingHome: false,
+    loadingMoreItem: false,
+    loadingMoreDemand: false
   },
 
   onShow() {
@@ -79,22 +100,113 @@ Page({
   },
 
   async loadHomeData() {
+    this.setData({
+      loadingHome: true,
+      loadingMoreItem: false,
+      loadingMoreDemand: false
+    });
     try {
-      const resp = await getHomePosts();
+      const resp = await getHomePosts({
+        itemLimit: ITEM_PAGE_SIZE,
+        itemOffset: 0,
+        demandLimit: DEMAND_PAGE_SIZE,
+        demandOffset: 0
+      });
       this.setData({
         items: (resp.items || []).map(buildItemCard),
         demands: (resp.demands || []).map((item) => ({
           ...item,
           icon: resolveDemandIcon(item.category)
-        }))
+        })),
+        itemPagination: {
+          nextOffset: Number(resp.itemPagination && resp.itemPagination.nextOffset) || (resp.items || []).length,
+          hasMore: Boolean(resp.itemPagination && resp.itemPagination.hasMore),
+          totalCount: Number(resp.itemPagination && resp.itemPagination.totalCount) || 0
+        },
+        demandPagination: {
+          nextOffset: Number(resp.demandPagination && resp.demandPagination.nextOffset) || (resp.demands || []).length,
+          hasMore: Boolean(resp.demandPagination && resp.demandPagination.hasMore),
+          totalCount: Number(resp.demandPagination && resp.demandPagination.totalCount) || 0
+        }
       });
     } catch (err) {
       wx.showToast({ title: '帖子加载失败', icon: 'none' });
       this.setData({
         items: [],
-        demands: []
+        demands: [],
+        itemPagination: { nextOffset: 0, hasMore: false, totalCount: 0 },
+        demandPagination: { nextOffset: 0, hasMore: false, totalCount: 0 }
       });
+    } finally {
+      this.setData({ loadingHome: false });
     }
+  },
+
+  async loadMoreItems() {
+    const { loadingMoreItem, loadingHome, itemPagination } = this.data;
+    if (loadingHome || loadingMoreItem || !itemPagination.hasMore) {
+      return;
+    }
+    this.setData({ loadingMoreItem: true });
+    try {
+      const resp = await getHomePosts({
+        itemLimit: ITEM_PAGE_SIZE,
+        itemOffset: Number(itemPagination.nextOffset || 0),
+        demandLimit: 0,
+        demandOffset: 0
+      });
+      this.setData({
+        items: mergeById(this.data.items, (resp.items || []).map(buildItemCard), 'id'),
+        itemPagination: {
+          nextOffset: Number(resp.itemPagination && resp.itemPagination.nextOffset) || itemPagination.nextOffset,
+          hasMore: Boolean(resp.itemPagination && resp.itemPagination.hasMore),
+          totalCount: Number(resp.itemPagination && resp.itemPagination.totalCount) || itemPagination.totalCount
+        }
+      });
+    } catch (err) {
+      wx.showToast({ title: '加载更多失败', icon: 'none' });
+    } finally {
+      this.setData({ loadingMoreItem: false });
+    }
+  },
+
+  async loadMoreDemands() {
+    const { loadingMoreDemand, loadingHome, demandPagination } = this.data;
+    if (loadingHome || loadingMoreDemand || !demandPagination.hasMore) {
+      return;
+    }
+    this.setData({ loadingMoreDemand: true });
+    try {
+      const resp = await getHomePosts({
+        itemLimit: 0,
+        itemOffset: 0,
+        demandLimit: DEMAND_PAGE_SIZE,
+        demandOffset: Number(demandPagination.nextOffset || 0)
+      });
+      this.setData({
+        demands: mergeById(this.data.demands, (resp.demands || []).map((item) => ({
+          ...item,
+          icon: resolveDemandIcon(item.category)
+        })), 'id'),
+        demandPagination: {
+          nextOffset: Number(resp.demandPagination && resp.demandPagination.nextOffset) || demandPagination.nextOffset,
+          hasMore: Boolean(resp.demandPagination && resp.demandPagination.hasMore),
+          totalCount: Number(resp.demandPagination && resp.demandPagination.totalCount) || demandPagination.totalCount
+        }
+      });
+    } catch (err) {
+      wx.showToast({ title: '加载更多失败', icon: 'none' });
+    } finally {
+      this.setData({ loadingMoreDemand: false });
+    }
+  },
+
+  onFeedLower() {
+    if (this.data.activeTab === 'available') {
+      this.loadMoreItems();
+      return;
+    }
+    this.loadMoreDemands();
   },
 
   switchTab(event) {

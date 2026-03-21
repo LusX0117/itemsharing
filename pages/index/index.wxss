@@ -198,6 +198,13 @@ page {
   font-size: 26rpx;
 }
 
+.load-more {
+  text-align: center;
+  color: #7b8089;
+  font-size: 22rpx;
+  padding: 8rpx 0 10rpx;
+}
+
 .fab {
   position: fixed;
   right: 26rpx;

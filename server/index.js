@@ -139,6 +139,13 @@ const toNumber = (value) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+const toInt = (value, fallback = 0) => {
+  const n = Number.parseInt(String(value), 10);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
 const genId = (prefix) => `${prefix}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 let isStorageBucketEnsured = false;
 
@@ -782,24 +789,164 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
   });
 }));
 
-app.get('/api/posts/home', asyncHandler(async (_req, res) => {
-  const itemResp = await supabase
-    .from('item_posts')
-    .select('*')
-    .eq('is_hidden', false)
-    .order('updated_at', { ascending: false });
-  throwIfError(itemResp.error, 'item_list_failed');
+app.get('/api/users/profile', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
 
-  const demandResp = await supabase
-    .from('demand_posts')
-    .select('*')
-    .eq('is_hidden', false)
-    .order('created_at', { ascending: false });
-  throwIfError(demandResp.error, 'demand_list_failed');
+  const requestedUserId = String((req.query && req.query.userId) || '').trim();
+  const targetUserId = requestedUserId || String(authUser.id);
+  if (!targetUserId) {
+    res.status(400).json({ error: 'missing_required_fields' });
+    return;
+  }
+
+  const targetUser = await loadUserById(targetUserId);
+  if (!targetUser) {
+    res.status(404).json({ error: 'user_not_found' });
+    return;
+  }
+
+  const [ratingResp, lenderDoneResp, borrowerDoneResp, sessionResp] = await Promise.all([
+    supabase
+      .from('session_ratings')
+      .select('*')
+      .eq('target_user_id', targetUserId)
+      .order('created_at', { ascending: false })
+      .limit(20),
+    supabase
+      .from('chat_sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('lender_user_id', targetUserId)
+      .eq('status', '已完成'),
+    supabase
+      .from('chat_sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('borrower_user_id', targetUserId)
+      .eq('status', '已完成'),
+    supabase
+      .from('chat_sessions')
+      .select('id, status')
+      .or(`lender_user_id.eq.${targetUserId},borrower_user_id.eq.${targetUserId}`)
+  ]);
+  throwIfError(ratingResp.error, 'profile_ratings_query_failed');
+  throwIfError(lenderDoneResp.error, 'profile_lender_done_count_failed');
+  throwIfError(borrowerDoneResp.error, 'profile_borrower_done_count_failed');
+  throwIfError(sessionResp.error, 'profile_session_query_failed');
+
+  const ratingSummary = buildRatingSummary(ratingResp.data || [], '');
+  const targetBucket = ratingSummary.byTarget[targetUserId] || {
+    averageScore: 0,
+    ratingCount: 0
+  };
+
+  const raterUserIds = Array.from(
+    new Set(
+      (ratingResp.data || [])
+        .map((row) => String(row.rater_user_id || '').trim())
+        .filter(Boolean)
+    )
+  );
+  const raterMap = await loadUsersByIds(raterUserIds);
+  const recentRatings = (ratingResp.data || []).map((row) => ({
+    id: toNumber(row.id),
+    score: toNumber(row.score),
+    comment: String(row.comment || ''),
+    createdAt: toNumber(row.created_at),
+    raterUserId: String(row.rater_user_id || ''),
+    raterName: (raterMap[String(row.rater_user_id)] && raterMap[String(row.rater_user_id)].nickname)
+      ? String(raterMap[String(row.rater_user_id)].nickname)
+      : '匿名用户'
+  }));
+
+  const activeSessionCount = (sessionResp.data || []).filter((row) => {
+    const status = String(row.status || '');
+    return !FINAL_SESSION_STATUSES.includes(status);
+  }).length;
 
   res.json({
-    items: (itemResp.data || []).map(mapItemPost),
-    demands: (demandResp.data || []).map(mapDemandPost)
+    profile: {
+      userId: String(targetUser.id),
+      nickname: String(targetUser.nickname || ''),
+      phone: String(targetUser.phone || ''),
+      isAdmin: Boolean(targetUser.is_admin),
+      averageScore: Number(targetBucket.averageScore || 0),
+      ratingCount: Number(targetBucket.ratingCount || 0),
+      completedAsLender: Number(lenderDoneResp.count || 0),
+      completedAsBorrower: Number(borrowerDoneResp.count || 0),
+      completedCount: Number(lenderDoneResp.count || 0) + Number(borrowerDoneResp.count || 0),
+      activeSessionCount,
+      recentRatings
+    }
+  });
+}));
+
+app.get('/api/posts/home', asyncHandler(async (req, res) => {
+  const rawItemLimit = toInt(req.query && req.query.itemLimit, 20);
+  const rawItemOffset = toInt(req.query && req.query.itemOffset, 0);
+  const rawDemandLimit = toInt(req.query && req.query.demandLimit, 20);
+  const rawDemandOffset = toInt(req.query && req.query.demandOffset, 0);
+
+  const itemLimit = clamp(rawItemLimit, 0, 60);
+  const itemOffset = Math.max(0, rawItemOffset);
+  const demandLimit = clamp(rawDemandLimit, 0, 60);
+  const demandOffset = Math.max(0, rawDemandOffset);
+
+  const [itemCountResp, demandCountResp] = await Promise.all([
+    supabase.from('item_posts').select('id', { count: 'exact', head: true }).eq('is_hidden', false),
+    supabase.from('demand_posts').select('id', { count: 'exact', head: true }).eq('is_hidden', false)
+  ]);
+  throwIfError(itemCountResp.error, 'item_count_failed');
+  throwIfError(demandCountResp.error, 'demand_count_failed');
+
+  const itemTotalCount = toNumber(itemCountResp.count);
+  const demandTotalCount = toNumber(demandCountResp.count);
+
+  let itemRows = [];
+  if (itemLimit > 0) {
+    const itemResp = await supabase
+      .from('item_posts')
+      .select('*')
+      .eq('is_hidden', false)
+      .order('updated_at', { ascending: false })
+      .range(itemOffset, itemOffset + itemLimit - 1);
+    throwIfError(itemResp.error, 'item_list_failed');
+    itemRows = itemResp.data || [];
+  }
+
+  let demandRows = [];
+  if (demandLimit > 0) {
+    const demandResp = await supabase
+      .from('demand_posts')
+      .select('*')
+      .eq('is_hidden', false)
+      .order('created_at', { ascending: false })
+      .range(demandOffset, demandOffset + demandLimit - 1);
+    throwIfError(demandResp.error, 'demand_list_failed');
+    demandRows = demandResp.data || [];
+  }
+
+  const itemNextOffset = itemOffset + itemRows.length;
+  const demandNextOffset = demandOffset + demandRows.length;
+
+  res.json({
+    items: itemRows.map(mapItemPost),
+    demands: demandRows.map(mapDemandPost),
+    itemPagination: {
+      limit: itemLimit,
+      offset: itemOffset,
+      nextOffset: itemNextOffset,
+      hasMore: itemNextOffset < itemTotalCount,
+      totalCount: itemTotalCount
+    },
+    demandPagination: {
+      limit: demandLimit,
+      offset: demandOffset,
+      nextOffset: demandNextOffset,
+      hasMore: demandNextOffset < demandTotalCount,
+      totalCount: demandTotalCount
+    }
   });
 }));
 
@@ -1110,6 +1257,146 @@ app.delete('/api/posts/demand/:id', asyncHandler(async (req, res) => {
   res.json({ ok: true, id });
 }));
 
+app.post('/api/posts/item/batch', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
+
+  const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids : [];
+  const action = String((req.body && req.body.action) || '').trim();
+  const hiddenReason = String((req.body && req.body.hiddenReason) || '').trim();
+  const itemIds = Array.from(
+    new Set(
+      ids
+        .map((id) => toNumber(id))
+        .filter((id) => id > 0)
+    )
+  );
+
+  if (!itemIds.length || !action) {
+    res.status(400).json({ error: 'missing_required_fields' });
+    return;
+  }
+
+  const now = Date.now();
+  const isAdmin = Boolean(authUser.is_admin);
+  const ownerId = String(authUser.id);
+
+  if (action === 'hide' || action === 'show') {
+    let query = supabase
+      .from('item_posts')
+      .update({
+        is_hidden: action === 'hide',
+        hidden_reason: action === 'hide' ? hiddenReason : '',
+        updated_at: now
+      })
+      .in('id', itemIds);
+    if (!isAdmin) {
+      query = query.eq('owner_user_id', ownerId);
+    }
+    const updatedResp = await query.select('id');
+    throwIfError(updatedResp.error, 'item_batch_update_failed');
+    const affectedIds = (updatedResp.data || []).map((row) => toNumber(row.id)).filter((id) => id > 0);
+    res.json({
+      ok: true,
+      action,
+      affectedCount: affectedIds.length,
+      affectedIds
+    });
+    return;
+  }
+
+  if (action === 'delete') {
+    let query = supabase.from('item_posts').delete().in('id', itemIds);
+    if (!isAdmin) {
+      query = query.eq('owner_user_id', ownerId);
+    }
+    const deletedResp = await query.select('id');
+    throwIfError(deletedResp.error, 'item_batch_delete_failed');
+    const affectedIds = (deletedResp.data || []).map((row) => toNumber(row.id)).filter((id) => id > 0);
+    res.json({
+      ok: true,
+      action,
+      affectedCount: affectedIds.length,
+      affectedIds
+    });
+    return;
+  }
+
+  res.status(400).json({ error: 'unsupported_action' });
+}));
+
+app.post('/api/posts/demand/batch', asyncHandler(async (req, res) => {
+  const authUser = await requireAuthUser(req, res);
+  if (!authUser) {
+    return;
+  }
+
+  const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids : [];
+  const action = String((req.body && req.body.action) || '').trim();
+  const hiddenReason = String((req.body && req.body.hiddenReason) || '').trim();
+  const demandIds = Array.from(
+    new Set(
+      ids
+        .map((id) => String(id || '').trim())
+        .filter(Boolean)
+    )
+  );
+
+  if (!demandIds.length || !action) {
+    res.status(400).json({ error: 'missing_required_fields' });
+    return;
+  }
+
+  const now = Date.now();
+  const isAdmin = Boolean(authUser.is_admin);
+  const publisherId = String(authUser.id);
+
+  if (action === 'hide' || action === 'show') {
+    let query = supabase
+      .from('demand_posts')
+      .update({
+        is_hidden: action === 'hide',
+        hidden_reason: action === 'hide' ? hiddenReason : '',
+        updated_at: now
+      })
+      .in('id', demandIds);
+    if (!isAdmin) {
+      query = query.eq('publisher_user_id', publisherId);
+    }
+    const updatedResp = await query.select('id');
+    throwIfError(updatedResp.error, 'demand_batch_update_failed');
+    const affectedIds = (updatedResp.data || []).map((row) => String(row.id)).filter(Boolean);
+    res.json({
+      ok: true,
+      action,
+      affectedCount: affectedIds.length,
+      affectedIds
+    });
+    return;
+  }
+
+  if (action === 'delete') {
+    let query = supabase.from('demand_posts').delete().in('id', demandIds);
+    if (!isAdmin) {
+      query = query.eq('publisher_user_id', publisherId);
+    }
+    const deletedResp = await query.select('id');
+    throwIfError(deletedResp.error, 'demand_batch_delete_failed');
+    const affectedIds = (deletedResp.data || []).map((row) => String(row.id)).filter(Boolean);
+    res.json({
+      ok: true,
+      action,
+      affectedCount: affectedIds.length,
+      affectedIds
+    });
+    return;
+  }
+
+  res.status(400).json({ error: 'unsupported_action' });
+}));
+
 app.post('/api/chat/session/start', asyncHandler(async (req, res) => {
   const authUser = await requireAuthUser(req, res);
   if (!authUser) {
@@ -1285,7 +1572,7 @@ app.get('/api/chat/messages', asyncHandler(async (req, res) => {
   if (!authUser) {
     return;
   }
-  const { sessionId, afterId } = req.query || {};
+  const { sessionId, afterId, beforeId } = req.query || {};
   if (!sessionId) {
     res.status(400).json({ error: 'missing_session_id' });
     return;
@@ -1305,21 +1592,47 @@ app.get('/api/chat/messages', asyncHandler(async (req, res) => {
     return;
   }
 
-  let query = supabase
+  const messageLimit = clamp(toInt(req.query && req.query.limit, 50), 1, 100);
+
+  if (afterId) {
+    const rows = await supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('session_id', String(sessionId))
+      .gt('id', toNumber(afterId))
+      .order('id', { ascending: true })
+      .limit(messageLimit);
+    throwIfError(rows.error, 'messages_query_failed');
+    res.json({
+      messages: (rows.data || []).map(mapMessage),
+      hasMore: false,
+      mode: 'after'
+    });
+    return;
+  }
+
+  let historyQuery = supabase
     .from('chat_messages')
     .select('*')
     .eq('session_id', String(sessionId))
-    .order('id', { ascending: true });
+    .order('id', { ascending: false })
+    .limit(messageLimit + 1);
 
-  if (afterId) {
-    query = query.gt('id', toNumber(afterId));
+  if (beforeId) {
+    historyQuery = historyQuery.lt('id', toNumber(beforeId));
   }
 
-  const rows = await query;
-  throwIfError(rows.error, 'messages_query_failed');
+  const historyResp = await historyQuery;
+  throwIfError(historyResp.error, 'messages_query_failed');
+
+  const historyRows = historyResp.data || [];
+  const hasMore = historyRows.length > messageLimit;
+  const sliced = (hasMore ? historyRows.slice(0, messageLimit) : historyRows).reverse();
 
   res.json({
-    messages: (rows.data || []).map(mapMessage)
+    messages: sliced.map(mapMessage),
+    hasMore,
+    mode: beforeId ? 'before' : 'latest'
   });
 }));
 

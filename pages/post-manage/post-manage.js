@@ -4,7 +4,9 @@ const {
   updateItemPost,
   updateDemandPost,
   deleteItemPost,
-  deleteDemandPost
+  deleteDemandPost,
+  batchItemPosts,
+  batchDemandPosts
 } = require('../../utils/post-api');
 
 const chooseAction = (itemList) => new Promise((resolve) => {
@@ -418,46 +420,48 @@ Page({
     }
 
     try {
+      let action = '';
+      let batchResp = null;
+
       if (idx === 0) {
-        const hiddenReason = allHidden
-          ? ''
-          : (this.data.isAdmin ? '管理员批量隐藏' : '用户批量隐藏');
-        for (let i = 0; i < targets.length; i += 1) {
-          const post = targets[i];
-          if (isItemTab) {
-            await updateItemPost(Number(post.id), {
-              actorUserId: String(currentUser.id),
-              isHidden: !allHidden,
-              hiddenReason
-            });
-          } else {
-            await updateDemandPost(String(post.id), {
-              actorUserId: String(currentUser.id),
-              isHidden: !allHidden,
-              hiddenReason
-            });
-          }
-        }
+        action = allHidden ? 'show' : 'hide';
+        const hiddenReason = action === 'hide'
+          ? (this.data.isAdmin ? '管理员批量隐藏' : '用户批量隐藏')
+          : '';
+        batchResp = isItemTab
+          ? await batchItemPosts({
+            ids: selectedIds.map((id) => Number(id)),
+            action,
+            hiddenReason
+          })
+          : await batchDemandPosts({
+            ids: selectedIds.map((id) => String(id)),
+            action,
+            hiddenReason
+          });
       } else if (idx === 1) {
         const ok = await confirmDelete(`将删除 ${targets.length} 条帖子，是否继续？`);
         if (!ok) {
           return;
         }
-        for (let i = 0; i < targets.length; i += 1) {
-          const post = targets[i];
-          if (isItemTab) {
-            await deleteItemPost(Number(post.id), {
-              actorUserId: String(currentUser.id)
-            });
-          } else {
-            await deleteDemandPost(String(post.id), {
-              actorUserId: String(currentUser.id)
-            });
-          }
-        }
+        action = 'delete';
+        batchResp = isItemTab
+          ? await batchItemPosts({
+            ids: selectedIds.map((id) => Number(id)),
+            action
+          })
+          : await batchDemandPosts({
+            ids: selectedIds.map((id) => String(id)),
+            action
+          });
       }
 
-      wx.showToast({ title: '批量操作成功', icon: 'success' });
+      const affectedCount = Number((batchResp && batchResp.affectedCount) || 0);
+      if (!affectedCount) {
+        wx.showToast({ title: '未匹配到可操作帖子', icon: 'none' });
+      } else {
+        wx.showToast({ title: `已处理 ${affectedCount} 条`, icon: 'success' });
+      }
       this.setData({
         selectedItemIds: [],
         selectedDemandIds: []

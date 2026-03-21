@@ -3,8 +3,10 @@ const { getCurrentUser } = require('../../utils/db');
 const { startChatSession } = require('../../utils/chat-api');
 const { getHomePosts } = require('../../utils/post-api');
 const { consumeAuthExpired } = require('../../utils/auth-guard');
+
 const TAB_INDEX = 1;
 const BORROWING_STATUSES = ['借用中', '待确认归还'];
+const SEARCH_PAGE_SIZE = 20;
 
 const syncTabBarSelected = (page, index) => {
   if (!page || typeof page.getTabBar !== 'function') {
@@ -40,6 +42,12 @@ const buildItemCard = (item) => {
   };
 };
 
+const mergeById = (current, incoming) => {
+  const idSet = new Set((current || []).map((item) => String(item.id)));
+  const append = (incoming || []).filter((item) => !idSet.has(String(item.id)));
+  return (current || []).concat(append);
+};
+
 Page({
   data: {
     currentUser: null,
@@ -47,13 +55,20 @@ Page({
     activeCategory: '全部',
     categoryOptions,
     items: [],
-    filteredItems: []
+    filteredItems: [],
+    loading: false,
+    loadingMore: false,
+    itemPagination: {
+      nextOffset: 0,
+      hasMore: true,
+      totalCount: 0
+    }
   },
 
   onShow() {
     syncTabBarSelected(this, TAB_INDEX);
     this.refreshCurrentUser();
-    this.loadItems();
+    this.resetAndLoad();
   },
 
   refreshCurrentUser() {
@@ -62,21 +77,72 @@ Page({
     });
   },
 
-  async loadItems() {
+  resetAndLoad() {
+    this.setData({
+      items: [],
+      filteredItems: [],
+      loading: true,
+      loadingMore: false,
+      itemPagination: {
+        nextOffset: 0,
+        hasMore: true,
+        totalCount: 0
+      }
+    }, () => {
+      this.loadMoreItems({ isFirstLoad: true });
+    });
+  },
+
+  async loadMoreItems(options = {}) {
+    const isFirstLoad = Boolean(options.isFirstLoad);
+    const { loadingMore, loading, itemPagination } = this.data;
+    if (!isFirstLoad && (loadingMore || loading || !itemPagination.hasMore)) {
+      return;
+    }
+
+    this.setData({
+      loadingMore: !isFirstLoad,
+      loading: isFirstLoad
+    });
     try {
-      const resp = await getHomePosts();
+      const resp = await getHomePosts({
+        itemLimit: SEARCH_PAGE_SIZE,
+        itemOffset: Number(itemPagination.nextOffset || 0),
+        demandLimit: 0,
+        demandOffset: 0
+      });
+      const nextItems = mergeById(this.data.items, (resp.items || []).map(buildItemCard));
       this.setData({
-        items: (resp.items || []).map(buildItemCard)
+        items: nextItems,
+        itemPagination: {
+          nextOffset: Number(resp.itemPagination && resp.itemPagination.nextOffset) || nextItems.length,
+          hasMore: Boolean(resp.itemPagination && resp.itemPagination.hasMore),
+          totalCount: Number(resp.itemPagination && resp.itemPagination.totalCount) || 0
+        }
       }, () => {
         this.filterItems();
       });
     } catch (err) {
-      wx.showToast({ title: '帖子加载失败', icon: 'none' });
+      if (isFirstLoad) {
+        wx.showToast({ title: '帖子加载失败', icon: 'none' });
+        this.setData({
+          items: [],
+          filteredItems: [],
+          itemPagination: { nextOffset: 0, hasMore: false, totalCount: 0 }
+        });
+      } else {
+        wx.showToast({ title: '加载更多失败', icon: 'none' });
+      }
+    } finally {
       this.setData({
-        items: [],
-        filteredItems: []
+        loading: false,
+        loadingMore: false
       });
     }
+  },
+
+  onResultsLower() {
+    this.loadMoreItems();
   },
 
   handleKeywordInput(event) {
@@ -187,7 +253,7 @@ Page({
           title: '该物品正在出借中',
           icon: 'none'
         });
-        this.loadItems();
+        this.resetAndLoad();
         return;
       }
       wx.showToast({

@@ -36,6 +36,10 @@
     </view>
 
     <view class="menu-card" wx:if="{{currentUser}}">
+      <view class="menu-row" bindtap="goMemberProfile">
+        <view class="menu-label">信用主页</view>
+        <view class="menu-arrow">→</view>
+      </view>
       <view class="menu-row" bindtap="goPostManage">
         <view class="menu-label">我的帖子</view>
         <view class="menu-arrow">→</view>

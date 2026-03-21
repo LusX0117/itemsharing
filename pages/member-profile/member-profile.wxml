@@ -1,2 +1,77 @@
-<!--pages/member-profile/member-profile.wxml-->
-<text>成员主页页面</text>
+<navigation-bar title="信用主页" color="black" background="#e3e3e5"></navigation-bar>
+
+<view wx:if="{{loading}}" class="missing-page">信用信息加载中...</view>
+
+<view wx:elif="{{!currentUser}}" class="missing-page">
+  <view class="missing-title">请先登录查看信用主页</view>
+  <button class="auth-btn" bindtap="goAuth">去登录</button>
+</view>
+
+<scroll-view wx:elif="{{profile}}" class="scrollarea" scroll-y enhanced enable-flex show-scrollbar="false">
+  <view class="page-wrap">
+    <view class="header-row">
+      <view class="header-title">信用主页</view>
+      <view class="close-btn" bindtap="goBack">✕</view>
+    </view>
+
+    <view class="profile-card">
+      <view class="user-info">
+        <view class="avatar">{{profile.avatarText}}</view>
+        <view class="user-meta">
+          <view class="name-row">
+            <view class="user-name">{{profile.nickname}}</view>
+            <view wx:if="{{profile.isAdmin}}" class="role-tag">管理员</view>
+          </view>
+          <view class="user-id">{{profile.phoneText}}</view>
+        </view>
+      </view>
+
+      <view class="stats-row">
+        <view class="stat-item">
+          <view class="stat-value">{{profile.scoreText}}</view>
+          <view class="stat-label">平均评分</view>
+        </view>
+        <view class="stat-item">
+          <view class="stat-value">{{profile.ratingCountText}}</view>
+          <view class="stat-label">评价数量</view>
+        </view>
+        <view class="stat-item">
+          <view class="stat-value">{{profile.completedCountText}}</view>
+          <view class="stat-label">完成借还</view>
+        </view>
+        <view class="stat-item">
+          <view class="stat-value">{{profile.activeSessionCountText}}</view>
+          <view class="stat-label">进行中会话</view>
+        </view>
+      </view>
+
+      <view class="stats-row detail">
+        <view class="stat-item">
+          <view class="stat-value">{{profile.completedAsLenderText}}</view>
+          <view class="stat-label">出借完成</view>
+        </view>
+        <view class="stat-item">
+          <view class="stat-value">{{profile.completedAsBorrowerText}}</view>
+          <view class="stat-label">借用完成</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="review-card">
+      <view class="review-title">最近收到的评价</view>
+
+      <view wx:if="{{profile.recentRatings.length === 0}}" class="empty-rating">暂无评价记录</view>
+
+      <view wx:for="{{profile.recentRatings}}" wx:key="id" class="review-item">
+        <view class="review-top">
+          <view class="review-rater">{{item.raterName}}</view>
+          <view class="review-date">{{item.createdAtText}}</view>
+        </view>
+        <view class="review-score">{{item.scoreStars}}（{{item.score}}分）</view>
+        <view class="review-comment">{{item.comment || '该评价未填写文字内容'}}</view>
+      </view>
+    </view>
+  </view>
+</scroll-view>
+
+<view wx:else class="missing-page">未找到该用户</view>

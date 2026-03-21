@@ -37,7 +37,7 @@
     </view>
   </view>
 
-  <scroll-view class="results-scroll" scroll-y enhanced enable-flex show-scrollbar="false">
+  <scroll-view class="results-scroll" scroll-y enhanced enable-flex show-scrollbar="false" bindscrolltolower="onResultsLower" lower-threshold="130">
     <view class="content-area">
       <view wx:if="{{filteredItems.length > 0}}" class="results-count">已找到 {{filteredItems.length}} 条结果</view>
 
@@ -53,6 +53,12 @@
           <view class="item-price">¥{{item.price}}/天 · 押金 ¥{{item.deposit}}</view>
         </view>
         <button class="borrow-btn {{item.isBorrowing ? 'disabled' : ''}}" size="mini" data-id="{{item.id}}" bindtap="applyBorrow" disabled="{{item.isBorrowing}}">{{item.borrowBtnText}}</button>
+      </view>
+
+      <view wx:if="{{filteredItems.length > 0}}" class="load-more">
+        <text wx:if="{{loadingMore}}">正在加载更多物品...</text>
+        <text wx:elif="{{itemPagination.hasMore}}">上拉加载更多</text>
+        <text wx:else>没有更多物品了</text>
       </view>
 
       <view wx:if="{{filteredItems.length === 0}}" class="empty-state">

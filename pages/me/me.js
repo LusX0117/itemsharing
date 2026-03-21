@@ -126,6 +126,16 @@ Page({
     });
   },
 
+  goMemberProfile() {
+    if (!this.data.currentUser) {
+      wx.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({
+      url: '/pages/member-profile/member-profile'
+    });
+  },
+
   logout() {
     clearCurrentUser();
     this.setData({

@@ -5,7 +5,7 @@
 <view wx:elif="{{session}}" class="chat-page" style="padding-bottom: {{keyboardHeight}}px;">
   <view class="header-section">
     <view class="nav-bar">
-      <view class="user-info">
+      <view class="user-info" bindtap="openPeerProfile">
         <view class="avatar">{{session.peerInitial}}</view>
         <view class="user-name">{{session.peerName}}</view>
       </view>
@@ -17,12 +17,20 @@
         <view class="item-title">{{session.itemTitle}}</view>
         <view class="status-badge {{session.statusBadgeClass}}">{{session.statusBadgeText}}</view>
       </view>
-      <button
-        wx:if="{{session.canChangeStatus}}"
-        class="status-action-btn {{session.statusActionClass}}"
-        size="mini"
-        catchtap="onStatusActionTap"
-      >{{session.statusActionText}}</button>
+      <view class="status-actions" wx:if="{{session.canChangeStatus || session.canSecondaryAction}}">
+        <button
+          wx:if="{{session.canChangeStatus}}"
+          class="status-action-btn {{session.statusActionClass}}"
+          size="mini"
+          catchtap="onStatusActionTap"
+        >{{session.statusActionText}}</button>
+        <button
+          wx:if="{{session.canSecondaryAction}}"
+          class="status-action-btn secondary {{session.secondaryStatusActionClass}}"
+          size="mini"
+          catchtap="onSecondaryStatusActionTap"
+        >{{session.secondaryStatusActionText}}</button>
+      </view>
     </view>
   </view>
 
@@ -34,7 +42,12 @@
     </view>
   </view>
 
-  <scroll-view class="chat-area" scroll-y scroll-with-animation scroll-into-view="{{lastMessageAnchor}}">
+  <scroll-view class="chat-area" scroll-y scroll-with-animation scroll-into-view="{{scrollIntoView}}">
+    <view wx:if="{{hasMoreHistory}}" class="history-load-wrap">
+      <button class="history-load-btn" bindtap="loadMoreHistory" loading="{{loadingHistory}}" disabled="{{loadingHistory}}">
+        {{loadingHistory ? '加载中...' : '加载更早消息'}}
+      </button>
+    </view>
     <view wx:for="{{messageList}}" wx:key="id" id="msg-{{item.id}}" class="message-row {{item.mine ? 'mine' : 'other'}} {{item.sender === 'system' ? 'system' : ''}}">
       <view class="message {{item.mine ? 'sent' : 'received'}} {{item.sender === 'system' ? 'system' : ''}}">
         <view class="message-text">{{item.text}}</view>

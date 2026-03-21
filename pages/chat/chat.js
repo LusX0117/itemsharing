@@ -9,6 +9,7 @@ const {
 const { consumeAuthExpired } = require('../../utils/auth-guard');
 
 const POLL_INTERVAL_MS = 3000;
+const HISTORY_PAGE_SIZE = 40;
 const ORDER_STAGE_LABELS = ['已申请', '已同意', '借用中', '已归还'];
 
 const formatDateTime = (timestamp) => {
@@ -71,6 +72,20 @@ const resolvePrimaryStatusAction = ({ status, isLender, isBorrower }) => {
   return null;
 };
 
+const resolveSecondaryStatusAction = ({ status, isLender, isBorrower }) => {
+  const text = String(status || '');
+  if (isLender && ['待出借者同意', '借用协商中'].includes(text)) {
+    return { text: '拒绝借用', action: 'reject_borrow', className: 'action-reject', needsReason: true };
+  }
+  if (isLender && text === '待确认归还') {
+    return { text: '退回归还', action: 'reject_return', className: 'action-reject', needsReason: true };
+  }
+  if (isBorrower && ['待出借者同意', '借用协商中', '借用中', '待确认归还'].includes(text)) {
+    return { text: '取消借用', action: 'cancel_borrow', className: 'action-cancel', needsReason: true };
+  }
+  return null;
+};
+
 Page({
   data: {
     sessionId: '',
@@ -78,7 +93,9 @@ Page({
     currentUser: null,
     messageList: [],
     messageText: '',
-    lastMessageAnchor: '',
+    scrollIntoView: '',
+    hasMoreHistory: false,
+    loadingHistory: false,
     lastReadMessageIdSent: 0,
     keyboardHeight: 0,
     loading: true
@@ -132,9 +149,6 @@ Page({
     this.isPageAlive = false;
     this.stopPolling();
     this.unbindKeyboardHeightListener();
-    this.safeSetData({
-      keyboardHeight: 0
-    }, { allowHidden: true });
   },
 
   bindKeyboardHeightListener() {
@@ -193,6 +207,7 @@ Page({
     const isLender = userId && userId === String(session.lenderUserId);
     const isBorrower = userId && userId === String(session.borrowerUserId);
     const peerName = isLender ? String(session.borrowerName || '') : String(session.lenderName || '');
+    const peerUserId = isLender ? String(session.borrowerUserId || '') : String(session.lenderUserId || '');
     const peerInitial = peerName ? peerName.slice(0, 1) : '友';
     const statusBadge = resolveStatusBadge(session.status, false);
     const itemTitleShort = String(session.itemTitle || '').slice(0, 4) || '物品';
@@ -201,10 +216,16 @@ Page({
       isLender,
       isBorrower
     });
+    const secondaryAction = resolveSecondaryStatusAction({
+      status: session.status,
+      isLender,
+      isBorrower
+    });
 
     return {
       ...session,
       peerName: peerName || '聊天对象',
+      peerUserId,
       peerInitial,
       itemTitleShort,
       statusBadgeText: statusBadge.text,
@@ -213,20 +234,54 @@ Page({
       canChangeStatus: Boolean(primaryAction),
       statusActionText: primaryAction ? primaryAction.text : '',
       statusActionType: primaryAction ? primaryAction.action : '',
-      statusActionClass: primaryAction ? primaryAction.className : ''
+      statusActionClass: primaryAction ? primaryAction.className : '',
+      canSecondaryAction: Boolean(secondaryAction),
+      secondaryStatusActionText: secondaryAction ? secondaryAction.text : '',
+      secondaryStatusActionType: secondaryAction ? secondaryAction.action : '',
+      secondaryStatusActionClass: secondaryAction ? secondaryAction.className : '',
+      secondaryStatusNeedsReason: secondaryAction ? Boolean(secondaryAction.needsReason) : false
     };
   },
 
-  applySessionAndMessages(session, mappedMessages) {
-    const lastMessage = mappedMessages[mappedMessages.length - 1];
-    const sessionWithView = this.buildSessionView(session);
+  setScrollIntoView(messageId) {
+    if (!messageId) {
+      return;
+    }
+    const anchor = `msg-${messageId}`;
+    if (this.data.scrollIntoView === anchor) {
+      this.safeSetData({ scrollIntoView: '' }, { allowHidden: true });
+      setTimeout(() => {
+        this.safeSetData({ scrollIntoView: anchor }, { allowHidden: true });
+      }, 0);
+      return;
+    }
+    this.safeSetData({ scrollIntoView: anchor }, { allowHidden: true });
+  },
 
+  appendNewMessages(rawMessages, options = {}) {
+    const { scrollToBottom = false } = options;
+    const mapped = this.mapMessages(rawMessages || []);
+    if (!mapped.length) {
+      return false;
+    }
+
+    const currentList = this.data.messageList || [];
+    const idSet = new Set(currentList.map((item) => Number(item.id)));
+    const added = mapped.filter((item) => !idSet.has(Number(item.id)));
+    if (!added.length) {
+      return false;
+    }
+
+    const nextList = currentList.concat(added).sort((a, b) => Number(a.id) - Number(b.id));
+    const lastMessage = nextList[nextList.length - 1];
     this.safeSetData({
-      session: sessionWithView,
-      messageList: mappedMessages,
-      lastMessageAnchor: lastMessage ? `msg-${lastMessage.id}` : '',
-      loading: false
+      messageList: nextList
     });
+    if (scrollToBottom && lastMessage) {
+      this.setScrollIntoView(lastMessage.id);
+    }
+    this.markSessionRead(nextList);
+    return true;
   },
 
   async refreshAll() {
@@ -239,7 +294,7 @@ Page({
     try {
       const [sessionResp, messageResp] = await Promise.all([
         getChatSession(sessionId),
-        getChatMessages(sessionId)
+        getChatMessages(sessionId, { limit: HISTORY_PAGE_SIZE })
       ]);
 
       const session = sessionResp.session;
@@ -249,7 +304,16 @@ Page({
       }
 
       const mappedMessages = this.mapMessages(messageResp.messages || []);
-      this.applySessionAndMessages(session, mappedMessages);
+      const lastMessage = mappedMessages[mappedMessages.length - 1];
+      this.safeSetData({
+        session: this.buildSessionView(session),
+        messageList: mappedMessages,
+        hasMoreHistory: Boolean(messageResp.hasMore),
+        loading: false
+      });
+      if (lastMessage) {
+        this.setScrollIntoView(lastMessage.id);
+      }
       await this.markSessionRead(mappedMessages);
     } catch (err) {
       if (consumeAuthExpired(err, {
@@ -258,7 +322,8 @@ Page({
           this.safeSetData({
             loading: false,
             currentUser: null,
-            session: null
+            session: null,
+            messageList: []
           });
         }
       })) {
@@ -272,25 +337,33 @@ Page({
   },
 
   async fetchLatestMessages() {
-    const { sessionId, session } = this.data;
+    const { sessionId, session, messageList } = this.data;
     if (!sessionId || !session) {
       return;
     }
 
+    const lastMessage = (messageList || [])[messageList.length - 1];
+    const lastMessageId = lastMessage ? Number(lastMessage.id) : 0;
+
     try {
       const [sessionResp, messageResp] = await Promise.all([
         getChatSession(sessionId),
-        getChatMessages(sessionId)
+        getChatMessages(sessionId, {
+          afterId: lastMessageId > 0 ? lastMessageId : undefined,
+          limit: 80
+        })
       ]);
 
-      const latestSession = sessionResp.session;
-      if (!latestSession) {
-        return;
+      if (sessionResp.session) {
+        this.safeSetData({
+          session: this.buildSessionView(sessionResp.session)
+        });
       }
 
-      const allMessages = this.mapMessages(messageResp.messages || []);
-      this.applySessionAndMessages(latestSession, allMessages);
-      await this.markSessionRead(allMessages);
+      const hasNew = this.appendNewMessages(messageResp.messages || [], { scrollToBottom: true });
+      if (!hasNew && sessionResp.session) {
+        await this.markSessionRead(this.data.messageList || []);
+      }
     } catch (err) {
       consumeAuthExpired(err, {
         showToast: false,
@@ -299,7 +372,48 @@ Page({
           this.stopPolling();
         }
       });
-      // polling failure should be silent to avoid toast spam
+    }
+  },
+
+  async loadMoreHistory() {
+    const { sessionId, loadingHistory, hasMoreHistory, messageList } = this.data;
+    if (!sessionId || loadingHistory || !hasMoreHistory) {
+      return;
+    }
+    const firstMessage = (messageList || [])[0];
+    if (!firstMessage) {
+      return;
+    }
+
+    this.safeSetData({ loadingHistory: true });
+    try {
+      const resp = await getChatMessages(sessionId, {
+        beforeId: firstMessage.id,
+        limit: HISTORY_PAGE_SIZE
+      });
+      const historyMessages = this.mapMessages(resp.messages || []);
+      if (!historyMessages.length) {
+        this.safeSetData({
+          hasMoreHistory: false,
+          loadingHistory: false
+        });
+        return;
+      }
+
+      const idSet = new Set((messageList || []).map((item) => Number(item.id)));
+      const prepend = historyMessages.filter((item) => !idSet.has(Number(item.id)));
+      const nextList = prepend.concat(messageList || []).sort((a, b) => Number(a.id) - Number(b.id));
+      this.safeSetData({
+        messageList: nextList,
+        hasMoreHistory: Boolean(resp.hasMore),
+        loadingHistory: false
+      });
+      this.setScrollIntoView(firstMessage.id);
+    } catch (err) {
+      this.safeSetData({ loadingHistory: false });
+      if (this.isPageVisible) {
+        wx.showToast({ title: '历史消息加载失败', icon: 'none' });
+      }
     }
   },
 
@@ -353,12 +467,16 @@ Page({
 
     const { sessionId } = this.data;
     try {
-      await sendChatMessage({
+      const resp = await sendChatMessage({
         sessionId,
         text
       });
       this.safeSetData({ messageText: '' });
-      await this.refreshAll();
+      if (resp && resp.message) {
+        this.appendNewMessages([resp.message], { scrollToBottom: true });
+      } else {
+        await this.fetchLatestMessages();
+      }
     } catch (err) {
       if (consumeAuthExpired(err)) {
         return;
@@ -369,12 +487,41 @@ Page({
     }
   },
 
-  onStatusActionTap() {
+  async onStatusActionTap() {
     const session = this.data.session;
     if (!session || !session.canChangeStatus || !session.statusActionType) {
       return;
     }
-    const action = String(session.statusActionType);
+    await this.handleStatusAction(session.statusActionType);
+  },
+
+  async onSecondaryStatusActionTap() {
+    const session = this.data.session;
+    if (!session || !session.canSecondaryAction || !session.secondaryStatusActionType) {
+      return;
+    }
+    await this.handleStatusAction(session.secondaryStatusActionType);
+  },
+
+  promptReason(title, placeholder) {
+    return new Promise((resolve) => {
+      wx.showModal({
+        title,
+        editable: true,
+        placeholderText: placeholder,
+        success: (res) => {
+          if (!res.confirm) {
+            resolve('');
+            return;
+          }
+          resolve(String(res.content || '').trim());
+        },
+        fail: () => resolve('')
+      });
+    });
+  },
+
+  async handleStatusAction(action) {
     if (action === 'request_return') {
       wx.showModal({
         title: '发起归还确认？',
@@ -387,6 +534,7 @@ Page({
       });
       return;
     }
+
     if (action === 'confirm_return') {
       wx.showModal({
         title: '确认已归还？',
@@ -399,10 +547,39 @@ Page({
       });
       return;
     }
+
     if (action === 'approve_borrow') {
       this.commitStatusAction(action, '已同意借用');
       return;
     }
+
+    if (action === 'reject_borrow') {
+      const reason = await this.promptReason('拒绝借用', '请输入拒绝原因');
+      if (!reason) {
+        return;
+      }
+      this.commitStatusAction(action, '已拒绝借用', { reason });
+      return;
+    }
+
+    if (action === 'reject_return') {
+      const reason = await this.promptReason('退回归还确认', '请输入退回原因');
+      if (!reason) {
+        return;
+      }
+      this.commitStatusAction(action, '已退回归还确认', { reason });
+      return;
+    }
+
+    if (action === 'cancel_borrow') {
+      const reason = await this.promptReason('取消借用', '请输入取消原因');
+      if (!reason) {
+        return;
+      }
+      this.commitStatusAction(action, '已取消借用', { reason });
+      return;
+    }
+
     this.commitStatusAction(action, '状态已更新');
   },
 
@@ -410,9 +587,10 @@ Page({
     try {
       await runChatSessionAction({
         sessionId: this.data.sessionId,
-        action
+        action,
+        reason: options.reason || ''
       });
-      await this.refreshAll();
+      await this.fetchLatestMessages();
       wx.showToast({ title: successText, icon: 'success' });
       if (options.toRating) {
         setTimeout(() => {
@@ -422,6 +600,10 @@ Page({
     } catch (err) {
       const msg = String((err && err.message) || '');
       if (consumeAuthExpired(err)) {
+        return;
+      }
+      if (msg.includes('missing_action_reason')) {
+        wx.showToast({ title: '请填写操作原因', icon: 'none' });
         return;
       }
       if (msg.includes('invalid_status_transition')) {
@@ -445,6 +627,16 @@ Page({
           this.openRatingPage();
         }
       }
+    });
+  },
+
+  openPeerProfile() {
+    const session = this.data.session;
+    if (!session || !session.peerUserId) {
+      return;
+    }
+    wx.navigateTo({
+      url: `/pages/member-profile/member-profile?userId=${encodeURIComponent(String(session.peerUserId))}`
     });
   },
 

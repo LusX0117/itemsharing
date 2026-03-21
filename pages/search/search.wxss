@@ -271,3 +271,10 @@ page {
   font-size: 24rpx;
   font-weight: 600;
 }
+
+.load-more {
+  text-align: center;
+  color: #7b8089;
+  font-size: 22rpx;
+  padding: 6rpx 0 12rpx;
+}

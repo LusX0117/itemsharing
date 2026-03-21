@@ -1,5 +1,7 @@
 const { API_BASE_URL } = require('./api-config');
-const AUTH_BASE_URL = API_BASE_URL;
+const { getAuthHeaders } = require('./db');
+
+const USER_BASE_URL = API_BASE_URL;
 const DEFAULT_TIMEOUT_MS = 20000;
 const RETRY_DELAY_MS = 800;
 
@@ -7,10 +9,11 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const request = ({ url, method = 'GET', data, timeout = DEFAULT_TIMEOUT_MS }) => new Promise((resolve, reject) => {
   wx.request({
-    url: `${AUTH_BASE_URL}${url}`,
+    url: `${USER_BASE_URL}${url}`,
     method,
     data,
     timeout,
+    header: getAuthHeaders(),
     success: (res) => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         resolve(res.data || {});
@@ -35,20 +38,14 @@ const requestWithRetry = async (options, retries = 1) => {
   }
 };
 
-const registerByServer = (payload) => requestWithRetry({
-  url: '/api/auth/register',
-  method: 'POST',
-  data: payload
-});
-
-const loginByServer = (payload) => requestWithRetry({
-  url: '/api/auth/login',
-  method: 'POST',
-  data: payload
-});
+const getUserProfile = (userId = '') => {
+  const suffix = userId ? `?userId=${encodeURIComponent(String(userId))}` : '';
+  return requestWithRetry({
+    url: `/api/users/profile${suffix}`
+  });
+};
 
 module.exports = {
-  AUTH_BASE_URL,
-  registerByServer,
-  loginByServer
+  USER_BASE_URL,
+  getUserProfile
 };
